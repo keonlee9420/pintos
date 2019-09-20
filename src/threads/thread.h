@@ -95,12 +95,16 @@ struct thread
 	
 		/* Project1-Thread Implementation */
 		int64_t wakeup_tick;								/* Alarm time to wake up */
+<<<<<<< HEAD
 		
 		int initpriority;										/* Thread's own priority */
 		uint8_t waitstatus;									/* Thread's wait status */
 		struct list_elem dntelem;						/* List element for blocked element */ 
 		struct list donor_list;							/* List of donor to the thread */
 		/* Project1=Thread Implementation End */
+=======
+		struct list_elem blkelem;						/* List element for blocked element */ 
+>>>>>>> f935b78... implement alarm by in-thread list
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

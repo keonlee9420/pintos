@@ -15,7 +15,7 @@
 #include "userprog/process.h"
 #endif
 /* Project1-Thread Implementation */
-#include "threads/malloc.h"
+#include <inttypes.h>
 /* Project1-Thread Implementation End */
 
 /* Random value for struct thread's `magic' member.
@@ -626,6 +626,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* Project1-Thread Implementation */
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 struct sleeping_thread
@@ -645,10 +646,13 @@ is_earlier_than(const struct list_elem *a, const struct list_elem* b, void* aux 
 }
 
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+>>>>>>> f935b78... implement alarm by in-thread list
 /* Insert into sleeping thread list, then blocks current thread */
 void 
 thread_sleep(int64_t tick)
 {
+<<<<<<< HEAD
 <<<<<<< HEAD
 	enum intr_level old_level;
 	/* Create sleeping thread list element */
@@ -661,17 +665,31 @@ thread_sleep(int64_t tick)
 
 	/* Block thread */
 =======
+=======
+	struct list_elem* e;
+	enum intr_level old_level;
+>>>>>>> f935b78... implement alarm by in-thread list
 	/* Create sleeping thread list element */
-	struct sleeping_thread* st = (struct sleeping_thread*)malloc(sizeof(struct sleeping_thread));
-	st->thread = thread_current();
-	st->wakeup_tick = tick;
+	struct thread* t = thread_current();
+	t->wakeup_tick = tick;
 	
-	/* Insert into sleeping list */
-	list_insert_ordered(&sleeping_list, &st->elem, is_earlier_than, NULL);
-	
+<<<<<<< HEAD
 /* Block thread */
 	enum intr_level old_level = intr_disable();
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+	/* Insert into sleeping list, ascending order */
+	old_level = intr_disable();
+	for(e = list_begin(&sleeping_list); e != list_end(&sleeping_list); 
+			e = list_next(e)){
+		struct thread* it = list_entry(e, struct thread, blkelem);
+		if(it->wakeup_tick > tick)
+			break;
+	}
+	list_insert(e, &t->blkelem);
+
+	/* Block thread */
+>>>>>>> f935b78... implement alarm by in-thread list
 	thread_block();
 	intr_set_level(old_level);
 }
@@ -686,6 +704,7 @@ thread_sleep(int64_t tick)
 void 
 thread_wake(int64_t cur_tick)
 {
+<<<<<<< HEAD
 <<<<<<< HEAD
 	/* Search from front of sleeping list, which needs to wake up earliest */
 	struct list_elem* e;
@@ -702,13 +721,23 @@ thread_wake(int64_t cur_tick)
 		thread_unblock(t);
 =======
 	enum intr_level old_level = intr_disable();
+=======
+>>>>>>> f935b78... implement alarm by in-thread list
 	/* Search from front of sleeping list, which needs to wake up earliest */
-	struct list_elem* e = list_begin(&sleeping_list);
-	while(e != list_end(&sleeping_list)){
-		struct sleeping_thread* st = list_entry(e, struct sleeping_thread, elem);
-		/* Return if no thread needs to wake up */
-		if(st->wakeup_tick > cur_tick)
+	struct list_elem* e;
+	enum intr_level old_level = intr_disable();
+	for(e = list_begin(&sleeping_list); e != list_end(&sleeping_list); 
+			e = list_begin(&sleeping_list))
+	{
+		struct thread* t = list_entry(e, struct thread, blkelem);
+		if(t->wakeup_tick <= cur_tick)
+		{
+			list_remove(&t->blkelem);
+			thread_unblock(t);
+		}
+		else
 			break;
+<<<<<<< HEAD
 		/* unblock wakeup thread */
 		thread_unblock(st->thread);
 		/* remove wakeup thread from sleeping list, 
@@ -760,6 +789,8 @@ priority_donate(struct thread* holder)
 			list_remove(&holder->elem);
 			thread_unblock(holder);
 			break;
+=======
+>>>>>>> f935b78... implement alarm by in-thread list
 	}
 	intr_set_level(old_level);
 }
