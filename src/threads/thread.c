@@ -14,6 +14,9 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+/* Project1-Thread Implementation */
+#include "threads/malloc.h"
+/* Project1-Thread Implementation End */
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -71,6 +74,13 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/* Implement Initializer from Project1-Thread */
+
+/* List of sleeping threads */
+struct list sleeping_list;
+
+/* End of Project1-Thread Initializer Implementation */
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -92,6 +102,9 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+	/* Project1-Thread Implementation */
+	list_init (&sleeping_list);
+	/* Project1-Thread Implementation End */
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -582,3 +595,73 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Project1-Thread Implementation */
+
+struct sleeping_thread
+	{
+		struct thread* thread;
+		int64_t wakeup_tick;
+		struct list_elem elem;
+	};
+
+/* Compare two thread by their element, then return smaller-valued thread */
+static bool 
+is_earlier_than(const struct list_elem *a, const struct list_elem* b, void* aux UNUSED)
+{
+	struct sleeping_thread* st1 = list_entry(a, struct sleeping_thread, elem);
+	struct sleeping_thread* st2 = list_entry(b, struct sleeping_thread, elem);
+	return st1->wakeup_tick < st2->wakeup_tick;
+}
+
+/* Insert into sleeping thread list, then blocks current thread */
+void 
+thread_sleep(int64_t tick)
+{
+	/* Create sleeping thread list element */
+	struct sleeping_thread* st = (struct sleeping_thread*)malloc(sizeof(struct sleeping_thread));
+	st->thread = thread_current();
+	st->wakeup_tick = tick;
+	
+	/* Insert into sleeping list */
+	list_insert_ordered(&sleeping_list, &st->elem, is_earlier_than, NULL);
+	
+/* Block thread */
+	enum intr_level old_level = intr_disable();
+	thread_block();
+	intr_set_level(old_level);
+}
+
+/* Search for every thread which needs to wake up,
+	 remove wakeup thread from sleeping list,
+	 then unblock wakeup thread */
+void 
+thread_wake(int64_t cur_tick)
+{
+	enum intr_level old_level = intr_disable();
+	/* Search from front of sleeping list, which needs to wake up earliest */
+	struct list_elem* e = list_begin(&sleeping_list);
+	while(e != list_end(&sleeping_list)){
+		struct sleeping_thread* st = list_entry(e, struct sleeping_thread, elem);
+		/* Return if no thread needs to wake up */
+		if(st->wakeup_tick > cur_tick)
+			break;
+		/* unblock wakeup thread */
+		thread_unblock(st->thread);
+		/* remove wakeup thread from sleeping list, 
+			 and free sleeping thread list element */
+		list_remove(e);
+		free(st);
+		/* set new front element of sleeping list */
+		e = list_begin(&sleeping_list);
+	}
+	intr_set_level(old_level);
+}
+
+
+
+
+
+
+
+

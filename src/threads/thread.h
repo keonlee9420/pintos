@@ -138,4 +138,9 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+/* Project1-Thread Implementation*/
+void thread_sleep(int64_t tick);
+void thread_wake(int64_t tick);
+/* Project1-Thread Implementation*/
+
 #endif /* threads/thread.h */
