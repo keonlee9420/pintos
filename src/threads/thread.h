@@ -92,6 +92,10 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+	
+		/* Project1-Thread Implementation */
+		int64_t wakeup_tick;								/* Alarm time to wake up */
+		struct list_elem blkelem;						/* List element for blocked element */ 
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
