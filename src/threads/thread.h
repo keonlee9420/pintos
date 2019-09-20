@@ -147,6 +147,7 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+<<<<<<< HEAD
 /* Project1-Thread Implementation */
 /* Find place that can insert thread in order of MEMBER value, based on OP 
 	 OP == > : ascending order, OP == < : descending order */
@@ -166,5 +167,11 @@ void priority_donate(struct thread* holder);
 void priority_release(struct list* waiters);
 void thread_set_waitstat(struct thread* t, uint8_t stat);
 /* Project1-Thread Implementation End */
+=======
+/* Project1-Thread Implementation*/
+void thread_sleep(int64_t tick);
+void thread_wake(int64_t tick);
+/* Project1-Thread Implementation*/
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 
 #endif /* threads/thread.h */
