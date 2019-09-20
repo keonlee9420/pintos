@@ -15,7 +15,11 @@
 #include "userprog/process.h"
 #endif
 /* Project1-Thread Implementation */
+<<<<<<< HEAD
 #include <inttypes.h>
+=======
+#include "threads/malloc.h"
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 /* Project1-Thread Implementation End */
 
 /* Random value for struct thread's `magic' member.
@@ -75,6 +79,7 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /* Project1-Thread Implementation*/
 /* List of sleeping threads */
 struct list sleeping_list;
@@ -83,12 +88,17 @@ static void priority_ready(struct thread* t);
 static void priority_new(struct thread* t);
 /* Project1-Thread Implementation End */
 =======
+=======
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 /* Implement Initializer from Project1-Thread */
 
 /* List of sleeping threads */
 struct list sleeping_list;
 
 /* End of Project1-Thread Initializer Implementation */
+<<<<<<< HEAD
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 
 /* Initializes the threading system by transforming the code
@@ -114,7 +124,11 @@ thread_init (void)
   list_init (&all_list);
 	/* Project1-Thread Implementation */
 <<<<<<< HEAD
+<<<<<<< HEAD
 	list_init(&sleeping_list);
+=======
+	list_init (&sleeping_list);
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 =======
 	list_init (&sleeping_list);
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
@@ -627,7 +641,10 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 /* Project1-Thread Implementation */
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 
 struct sleeping_thread
 	{
@@ -645,13 +662,17 @@ is_earlier_than(const struct list_elem *a, const struct list_elem* b, void* aux 
 	return st1->wakeup_tick < st2->wakeup_tick;
 }
 
+<<<<<<< HEAD
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 =======
 >>>>>>> f935b78... implement alarm by in-thread list
+=======
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 /* Insert into sleeping thread list, then blocks current thread */
 void 
 thread_sleep(int64_t tick)
 {
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 	enum intr_level old_level;
@@ -690,12 +711,28 @@ thread_sleep(int64_t tick)
 
 	/* Block thread */
 >>>>>>> f935b78... implement alarm by in-thread list
+=======
+	/* Create sleeping thread list element */
+	struct sleeping_thread* st = (struct sleeping_thread*)malloc(sizeof(struct sleeping_thread));
+	st->thread = thread_current();
+	st->wakeup_tick = tick;
+	
+	/* Insert into sleeping list */
+	list_insert_ordered(&sleeping_list, &st->elem, is_earlier_than, NULL);
+	
+/* Block thread */
+	enum intr_level old_level = intr_disable();
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 	thread_block();
 	intr_set_level(old_level);
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /* Search for every thread which needs to wake up from beginning of list,
+=======
+/* Search for every thread which needs to wake up,
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 =======
 /* Search for every thread which needs to wake up,
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
@@ -704,6 +741,7 @@ thread_sleep(int64_t tick)
 void 
 thread_wake(int64_t cur_tick)
 {
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 	/* Search from front of sleeping list, which needs to wake up earliest */
@@ -738,6 +776,16 @@ thread_wake(int64_t cur_tick)
 		else
 			break;
 <<<<<<< HEAD
+=======
+	enum intr_level old_level = intr_disable();
+	/* Search from front of sleeping list, which needs to wake up earliest */
+	struct list_elem* e = list_begin(&sleeping_list);
+	while(e != list_end(&sleeping_list)){
+		struct sleeping_thread* st = list_entry(e, struct sleeping_thread, elem);
+		/* Return if no thread needs to wake up */
+		if(st->wakeup_tick > cur_tick)
+			break;
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 		/* unblock wakeup thread */
 		thread_unblock(st->thread);
 		/* remove wakeup thread from sleeping list, 
@@ -746,6 +794,7 @@ thread_wake(int64_t cur_tick)
 		free(st);
 		/* set new front element of sleeping list */
 		e = list_begin(&sleeping_list);
+<<<<<<< HEAD
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 	}
 	intr_set_level(old_level);
@@ -791,10 +840,13 @@ priority_donate(struct thread* holder)
 			break;
 =======
 >>>>>>> f935b78... implement alarm by in-thread list
+=======
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 	}
 	intr_set_level(old_level);
 }
 
+<<<<<<< HEAD
 /* Remove priority donation from thread T 
 	 Step 1: Remove every thread in LIST from donor list of current thread
 	 Step 2: Reset priority of current thread */
@@ -843,11 +895,16 @@ thread_set_waitstat(struct thread* t, uint8_t stat)
 	t->waitstatus = stat;
 }
 =======
+=======
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 
 
 
 
 
 
+<<<<<<< HEAD
+>>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 
