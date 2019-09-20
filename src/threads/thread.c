@@ -80,6 +80,7 @@ static tid_t allocate_tid (void);
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 /* Project1-Thread Implementation*/
 /* List of sleeping threads */
 struct list sleeping_list;
@@ -100,6 +101,15 @@ struct list sleeping_list;
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 =======
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+/* Project1-Thread Implementation*/
+/* List of sleeping threads */
+struct list sleeping_list;
+
+static void priority_ready(struct thread* t);
+
+/* Project1-Thread Implementation End */
+>>>>>>> 2cf278d... order ready list based on priority
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -278,6 +288,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+<<<<<<< HEAD
 	/* Project1-Thread Implementation */
   priority_ready(t);
 	t->status = THREAD_READY;
@@ -285,6 +296,13 @@ thread_unblock (struct thread *t)
 			thread_current()->priority < t->priority)
 		thread_yield();
 	/* Project1-Thread Implementation End */
+=======
+  priority_ready(t);
+	t->status = THREAD_READY;
+	if(thread_current() != idle_thread){
+		thread_yield();
+	}
+>>>>>>> 2cf278d... order ready list based on priority
   intr_set_level (old_level);
 }
 
@@ -354,9 +372,13 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
+<<<<<<< HEAD
 		/* Project1-Thread Implementation */
     priority_ready(cur);
 		/* Project1-Thread Implementation End */
+=======
+    priority_ready(cur);
+>>>>>>> 2cf278d... order ready list based on priority
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -383,8 +405,12 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+<<<<<<< HEAD
 	thread_current ()->initpriority = new_priority;
 	priority_new(thread_current());
+=======
+	thread_current ()->priority = new_priority;
+>>>>>>> 2cf278d... order ready list based on priority
 	thread_yield();
 }
 
@@ -642,6 +668,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
@@ -668,6 +695,16 @@ is_earlier_than(const struct list_elem *a, const struct list_elem* b, void* aux 
 >>>>>>> f935b78... implement alarm by in-thread list
 =======
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+/* Find place that can insert thread in ascending value of MEMBER value */
+#define insert_thread(LIST, ELEM, THREAD, MEMBER, OP)																\
+			ASSERT(intr_get_level() == INTR_OFF);																					\
+			for(ELEM = list_begin(&LIST); ELEM != list_end(&LIST); ELEM = list_next(e))		\
+				if(list_entry(ELEM, struct thread, elem)->MEMBER OP THREAD->MEMBER)					\
+					break;																																		\
+			list_insert(ELEM, &THREAD->elem);
+
+>>>>>>> 2cf278d... order ready list based on priority
 /* Insert into sleeping thread list, then blocks current thread */
 void 
 thread_sleep(int64_t tick)
@@ -691,8 +728,8 @@ thread_sleep(int64_t tick)
 	enum intr_level old_level;
 >>>>>>> f935b78... implement alarm by in-thread list
 	/* Create sleeping thread list element */
-	struct thread* t = thread_current();
-	t->wakeup_tick = tick;
+	struct thread* cur = thread_current();
+	cur->wakeup_tick = tick;
 	
 <<<<<<< HEAD
 /* Block thread */
@@ -701,13 +738,7 @@ thread_sleep(int64_t tick)
 =======
 	/* Insert into sleeping list, ascending order */
 	old_level = intr_disable();
-	for(e = list_begin(&sleeping_list); e != list_end(&sleeping_list); 
-			e = list_next(e)){
-		struct thread* it = list_entry(e, struct thread, blkelem);
-		if(it->wakeup_tick > tick)
-			break;
-	}
-	list_insert(e, &t->blkelem);
+	insert_thread(sleeping_list, e, cur, wakeup_tick, >);
 
 	/* Block thread */
 >>>>>>> f935b78... implement alarm by in-thread list
@@ -729,6 +760,7 @@ thread_sleep(int64_t tick)
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 /* Search for every thread which needs to wake up from beginning of list,
 =======
 /* Search for every thread which needs to wake up,
@@ -736,6 +768,9 @@ thread_sleep(int64_t tick)
 =======
 /* Search for every thread which needs to wake up,
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+/* Search for every thread which needs to wake up from beginning of list,
+>>>>>>> 2cf278d... order ready list based on priority
 	 remove wakeup thread from sleeping list,
 	 then unblock wakeup thread */
 void 
@@ -767,14 +802,10 @@ thread_wake(int64_t cur_tick)
 	for(e = list_begin(&sleeping_list); e != list_end(&sleeping_list); 
 			e = list_begin(&sleeping_list))
 	{
-		struct thread* t = list_entry(e, struct thread, blkelem);
-		if(t->wakeup_tick <= cur_tick)
-		{
-			list_remove(&t->blkelem);
-			thread_unblock(t);
-		}
-		else
+		struct thread* t = list_entry(e, struct thread, elem);
+		if(t->wakeup_tick > cur_tick)
 			break;
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 	enum intr_level old_level = intr_disable();
@@ -796,10 +827,15 @@ thread_wake(int64_t cur_tick)
 		e = list_begin(&sleeping_list);
 <<<<<<< HEAD
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+		list_remove(&t->elem);
+		thread_unblock(t);
+>>>>>>> 2cf278d... order ready list based on priority
 	}
 	intr_set_level(old_level);
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 /* Insert thread into ready list, in priority-descending order */
 static void 
@@ -899,6 +935,16 @@ thread_set_waitstat(struct thread* t, uint8_t stat)
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 
 
+=======
+static void 
+priority_ready(struct thread* t)
+{
+	struct list_elem* e;
+	enum intr_level old_level = intr_disable();
+	insert_thread(ready_list, e, t, priority, <);
+	intr_set_level(old_level);
+}
+>>>>>>> 2cf278d... order ready list based on priority
 
 
 
