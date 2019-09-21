@@ -69,7 +69,10 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       insert_thread(sema->waiters, thread_current(), elem, priority, <); 
+<<<<<<< HEAD
 			thread_set_waitstat(thread_current(), 2);
+=======
+>>>>>>> ba83a3e... daoate priority by store in donor list
 			thread_block ();
     }
   sema->value--;
@@ -116,6 +119,7 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
 	sema->value++;
   if(!list_empty (&sema->waiters))
+<<<<<<< HEAD
 	{
 		struct thread* t = list_entry (list_pop_front (&sema->waiters), 
 																		struct thread, elem);
@@ -123,6 +127,11 @@ sema_up (struct semaphore *sema)
 		thread_unblock(t);
   }
 	intr_set_level (old_level);
+=======
+		thread_unblock(list_entry (list_pop_front (&sema->waiters), 
+																struct thread, elem));
+  intr_set_level (old_level);
+>>>>>>> ba83a3e... daoate priority by store in donor list
 }
 
 static void sema_test_helper (void *sema_);
@@ -207,9 +216,14 @@ lock_acquire (struct lock *lock)
 	old_level = intr_disable();
 	while(!lock_try_acquire(lock))
 	{
+<<<<<<< HEAD
 		insert_thread(lock->semaphore.waiters, thread_current(), elem, priority, <);
 		priority_donate(lock->holder);
 		thread_set_waitstat(thread_current(), 1);
+=======
+		priority_donate(lock->holder);
+		insert_thread(lock->semaphore.waiters, thread_current(), elem, priority, <);
+>>>>>>> ba83a3e... daoate priority by store in donor list
 		thread_block();		
 	}
   lock->holder = thread_current ();

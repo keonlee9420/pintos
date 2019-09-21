@@ -14,6 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+<<<<<<< HEAD
 /* Project1-Thread Implementation */
 <<<<<<< HEAD
 #include <inttypes.h>
@@ -21,6 +22,8 @@
 #include "threads/malloc.h"
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 /* Project1-Thread Implementation End */
+=======
+>>>>>>> ba83a3e... daoate priority by store in donor list
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -107,7 +110,7 @@ struct list sleeping_list;
 struct list sleeping_list;
 
 static void priority_ready(struct thread* t);
-
+static void priority_new(struct thread* t);
 /* Project1-Thread Implementation End */
 >>>>>>> 2cf278d... order ready list based on priority
 
@@ -135,6 +138,7 @@ thread_init (void)
 	/* Project1-Thread Implementation */
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 	list_init(&sleeping_list);
 =======
 	list_init (&sleeping_list);
@@ -142,6 +146,9 @@ thread_init (void)
 =======
 	list_init (&sleeping_list);
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+	list_init(&sleeping_list);
+>>>>>>> ba83a3e... daoate priority by store in donor list
 	/* Project1-Thread Implementation End */
 
   /* Set up a thread structure for the running thread. */
@@ -289,6 +296,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
 <<<<<<< HEAD
+<<<<<<< HEAD
 	/* Project1-Thread Implementation */
   priority_ready(t);
 	t->status = THREAD_READY;
@@ -297,12 +305,20 @@ thread_unblock (struct thread *t)
 		thread_yield();
 	/* Project1-Thread Implementation End */
 =======
+=======
+	/* Project1-Thread Implementation */
+>>>>>>> ba83a3e... daoate priority by store in donor list
   priority_ready(t);
 	t->status = THREAD_READY;
-	if(thread_current() != idle_thread){
+	if(thread_current() != idle_thread && 
+			thread_current()->priority < t->priority)
 		thread_yield();
+<<<<<<< HEAD
 	}
 >>>>>>> 2cf278d... order ready list based on priority
+=======
+	/* Project1-Thread Implementation End */
+>>>>>>> ba83a3e... daoate priority by store in donor list
   intr_set_level (old_level);
 }
 
@@ -373,12 +389,18 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
 <<<<<<< HEAD
+<<<<<<< HEAD
 		/* Project1-Thread Implementation */
     priority_ready(cur);
 		/* Project1-Thread Implementation End */
 =======
     priority_ready(cur);
 >>>>>>> 2cf278d... order ready list based on priority
+=======
+		/* Project1-Thread Implementation */
+    priority_ready(cur);
+		/* Project1-Thread Implementation End */
+>>>>>>> ba83a3e... daoate priority by store in donor list
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -406,11 +428,16 @@ void
 thread_set_priority (int new_priority) 
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	thread_current ()->initpriority = new_priority;
 	priority_new(thread_current());
 =======
 	thread_current ()->priority = new_priority;
 >>>>>>> 2cf278d... order ready list based on priority
+=======
+	thread_current ()->initpriority = new_priority;
+	priority_new(thread_current());
+>>>>>>> ba83a3e... daoate priority by store in donor list
 	thread_yield();
 }
 
@@ -540,7 +567,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
 	/* Project1-Thread Implementation */
 	t->initpriority = priority;
+<<<<<<< HEAD
 	t->waitstatus = 0;
+=======
+>>>>>>> ba83a3e... daoate priority by store in donor list
 	list_init(&t->donor_list);
 	/* Project1-Thread Implementation End */
   t->magic = THREAD_MAGIC;
@@ -669,6 +699,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
@@ -705,10 +736,13 @@ is_earlier_than(const struct list_elem *a, const struct list_elem* b, void* aux 
 			list_insert(ELEM, &THREAD->elem);
 
 >>>>>>> 2cf278d... order ready list based on priority
+=======
+>>>>>>> ba83a3e... daoate priority by store in donor list
 /* Insert into sleeping thread list, then blocks current thread */
 void 
 thread_sleep(int64_t tick)
 {
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -725,6 +759,8 @@ thread_sleep(int64_t tick)
 =======
 =======
 	struct list_elem* e;
+=======
+>>>>>>> ba83a3e... daoate priority by store in donor list
 	enum intr_level old_level;
 >>>>>>> f935b78... implement alarm by in-thread list
 	/* Create sleeping thread list element */
@@ -738,7 +774,7 @@ thread_sleep(int64_t tick)
 =======
 	/* Insert into sleeping list, ascending order */
 	old_level = intr_disable();
-	insert_thread(sleeping_list, e, cur, wakeup_tick, >);
+	insert_thread(sleeping_list, cur, elem, wakeup_tick, >);
 
 	/* Block thread */
 >>>>>>> f935b78... implement alarm by in-thread list
@@ -883,6 +919,7 @@ priority_donate(struct thread* holder)
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /* Remove priority donation from thread T 
 	 Step 1: Remove every thread in LIST from donor list of current thread
 	 Step 2: Reset priority of current thread */
@@ -936,21 +973,87 @@ thread_set_waitstat(struct thread* t, uint8_t stat)
 
 
 =======
+=======
+/* Insert thread into ready list, in priority-descending order */
+>>>>>>> ba83a3e... daoate priority by store in donor list
 static void 
 priority_ready(struct thread* t)
 {
-	struct list_elem* e;
 	enum intr_level old_level = intr_disable();
-	insert_thread(ready_list, e, t, priority, <);
+	insert_thread(ready_list, t, elem, priority, <);
 	intr_set_level(old_level);
 }
 >>>>>>> 2cf278d... order ready list based on priority
 
+/* Donate priority of current thread to HOLDER thread.
+	 Step 1: Insert current thread into HOLDER's donor list
+	 Step 2: Set new priority of HOLDER
+	 Step 3: Unblock if HOLDER is blocked for nesting donation,
+						or re-insert HOLDER into ready list according to new priority */
+void 
+priority_donate(struct thread* holder)
+{
+	enum intr_level old_level = intr_disable();
+	/* Step 1: Insert current thread into donor list */
+	insert_thread(holder->donor_list, thread_current(), dntelem, priority, <);
 
+	/* Step 2: Set new priority */
+	priority_new(holder);
 
+	/* Step 3: Unblock or rearrange HOLDER */
+	if(holder->status == THREAD_BLOCKED)
+	{
+		list_remove(&holder->dntelem);
+		thread_unblock(holder);
+	}
+	else if(holder->status == THREAD_READY)
+	{
+		list_remove(&holder->elem);
+		priority_ready(holder);
+	}
+	intr_set_level(old_level);	
+}
 
+/* Remove priority donation from thread T 
+	 Step 1: Remove every thread in LIST from donor list of current thread
+	 Step 2: Reset priority of current thread */
+void 
+priority_release(struct list* waiters)
+{
+	struct list_elem* e;
+	enum intr_level old_level = intr_disable();
+	/* Step 1: Remove every thread in LIST from donor list */
+	for(e = list_begin(waiters); e != list_end(waiters); e = list_next(e))
+		list_remove(&list_entry(e, struct thread, elem)->dntelem);
+	
+	/* Step 2: Reset priority */
+	priority_new(thread_current());
+	intr_set_level(old_level);
+}
+
+<<<<<<< HEAD
 <<<<<<< HEAD
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
 =======
 >>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
+=======
+/* Set priority of thread T 
+	 Compare its initial priority and largest value of donated priority,
+	 then set larger one to T's priority */
+static void 
+priority_new(struct thread* t)
+{
+	/* Set to initiatl priority if nothing donated */
+	if(list_empty(&t->donor_list))
+		t->priority = t->initpriority;
+	/* Set max(initial priority, max donated priority) to T's priority */
+	else
+	{
+		int donate_priority = list_entry(list_front(&t->donor_list), 
+																	struct thread, dntelem)->priority;
+		t->priority = t->initpriority < donate_priority ? 
+										donate_priority : t->initpriority;
+	}
+}
+>>>>>>> ba83a3e... daoate priority by store in donor list
 
