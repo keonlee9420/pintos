@@ -95,7 +95,11 @@ struct thread
 	
 		/* Project1-Thread Implementation */
 		int64_t wakeup_tick;								/* Alarm time to wake up */
-		struct list_elem blkelem;						/* List element for blocked element */ 
+		
+		int initpriority;										/* Thread's own priority */
+		struct list_elem dntelem;						/* List element for blocked element */ 
+		struct list donor_list;							/* List of donor to the thread */
+		/* Project1=Thread Implementation End */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -142,9 +146,23 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-/* Project1-Thread Implementation*/
+/* Project1-Thread Implementation */
+/* Find place that can insert thread in order of MEMBER value, based on OP 
+	 OP == > : ascending order, OP == < : descending order */
+#define insert_thread(LIST, THREAD, THRELEM, MEMBER, OP)	do {						\
+	struct list_elem* e;																										\
+	ASSERT(intr_get_level() == INTR_OFF);																		\
+	for(e = list_begin(&LIST); e != list_end(&LIST); e = list_next(e))			\
+		if(list_entry(e, struct thread, THRELEM)->MEMBER OP THREAD->MEMBER)		\
+			break;																															\
+	list_insert(e, &THREAD->THRELEM);																				\
+} while (0)
+
 void thread_sleep(int64_t tick);
 void thread_wake(int64_t tick);
-/* Project1-Thread Implementation*/
+
+void priority_donate(struct thread* holder);
+void priority_release(struct list* waiters);
+/* Project1-Thread Implementation End */
 
 #endif /* threads/thread.h */
