@@ -568,9 +568,13 @@ init_thread (struct thread *t, const char *name, int priority)
 	/* Project1-Thread Implementation */
 	t->initpriority = priority;
 <<<<<<< HEAD
+<<<<<<< HEAD
 	t->waitstatus = 0;
 =======
 >>>>>>> ba83a3e... daoate priority by store in donor list
+=======
+	t->waitstatus = 0;
+>>>>>>> dd2f104... Store waiting status by adding attribute
 	list_init(&t->donor_list);
 	/* Project1-Thread Implementation End */
   t->magic = THREAD_MAGIC;
@@ -1001,17 +1005,20 @@ priority_donate(struct thread* holder)
 	priority_new(holder);
 
 	/* Step 3: Unblock or rearrange HOLDER */
-	if(holder->status == THREAD_BLOCKED)
+	switch(holder->waitstatus)
 	{
-		list_remove(&holder->dntelem);
-		thread_unblock(holder);
+		case 0: 	/* Not waiting any synchronization */
+			list_remove(&holder->elem);
+			priority_ready(holder);
+			break;
+		case 1:		/* Waiting for lock */
+			list_remove(&holder->dntelem);
+		case 2:		/* Waiting for sema */
+			list_remove(&holder->elem);
+			thread_unblock(holder);
+			break;
 	}
-	else if(holder->status == THREAD_READY)
-	{
-		list_remove(&holder->elem);
-		priority_ready(holder);
-	}
-	intr_set_level(old_level);	
+	intr_set_level(old_level);
 }
 
 /* Remove priority donation from thread T 
@@ -1056,4 +1063,16 @@ priority_new(struct thread* t)
 	}
 }
 >>>>>>> ba83a3e... daoate priority by store in donor list
+
+/* Set current thread's waiting status 
+	 0: Not waiting any synchronization
+	 1: Waiting for lock
+	 2: Waiting for semaphore
+*/
+
+void 
+thread_set_waitstat(struct thread* t, uint8_t stat)
+{
+	t->waitstatus = stat;
+}
 

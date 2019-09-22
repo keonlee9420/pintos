@@ -201,6 +201,7 @@ void thread_wake(int64_t tick);
 
 void priority_donate(struct thread* holder);
 void priority_release(struct list* waiters);
+void thread_set_waitstat(struct thread* t, uint8_t stat);
 /* Project1-Thread Implementation End */
 >>>>>>> ba83a3e... daoate priority by store in donor list
 
