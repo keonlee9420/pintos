@@ -97,6 +97,7 @@ struct thread
 		int64_t wakeup_tick;								/* Alarm time to wake up */
 		
 		int initpriority;										/* Thread's own priority */
+		uint8_t waitstatus;									/* Thread's wait status */
 		struct list_elem dntelem;						/* List element for blocked element */ 
 		struct list donor_list;							/* List of donor to the thread */
 		/* Project1=Thread Implementation End */
@@ -163,6 +164,7 @@ void thread_wake(int64_t tick);
 
 void priority_donate(struct thread* holder);
 void priority_release(struct list* waiters);
+void thread_set_waitstat(struct thread* t, uint8_t stat);
 /* Project1-Thread Implementation End */
 
 #endif /* threads/thread.h */

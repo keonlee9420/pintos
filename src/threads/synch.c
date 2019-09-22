@@ -69,6 +69,7 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       insert_thread(sema->waiters, thread_current(), elem, priority, <); 
+			thread_set_waitstat(thread_current(), 2);
 			thread_block ();
     }
   sema->value--;
@@ -115,9 +116,13 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
 	sema->value++;
   if(!list_empty (&sema->waiters))
-		thread_unblock(list_entry (list_pop_front (&sema->waiters), 
-																struct thread, elem));
-  intr_set_level (old_level);
+	{
+		struct thread* t = list_entry (list_pop_front (&sema->waiters), 
+																		struct thread, elem);
+		thread_set_waitstat(t, 0);
+		thread_unblock(t);
+  }
+	intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
@@ -202,8 +207,9 @@ lock_acquire (struct lock *lock)
 	old_level = intr_disable();
 	while(!lock_try_acquire(lock))
 	{
-		priority_donate(lock->holder);
 		insert_thread(lock->semaphore.waiters, thread_current(), elem, priority, <);
+		priority_donate(lock->holder);
+		thread_set_waitstat(thread_current(), 1);
 		thread_block();		
 	}
   lock->holder = thread_current ();
