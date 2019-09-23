@@ -95,24 +95,12 @@ struct thread
 	
 		/* Project1-Thread Implementation */
 		int64_t wakeup_tick;								/* Alarm time to wake up */
-<<<<<<< HEAD
-<<<<<<< HEAD
 		
 		int initpriority;										/* Thread's own priority */
 		uint8_t waitstatus;									/* Thread's wait status */
 		struct list_elem dntelem;						/* List element for blocked element */ 
 		struct list donor_list;							/* List of donor to the thread */
 		/* Project1=Thread Implementation End */
-=======
-		struct list_elem blkelem;						/* List element for blocked element */ 
->>>>>>> f935b78... implement alarm by in-thread list
-=======
-		
-		int initpriority;										/* Thread's own priority */
-		struct list_elem dntelem;						/* List element for blocked element */ 
-		struct list donor_list;							/* List of donor to the thread */
-		/* Project1=Thread Implementation End */
->>>>>>> ba83a3e... daoate priority by store in donor list
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -159,11 +147,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> ba83a3e... daoate priority by store in donor list
 /* Project1-Thread Implementation */
 /* Find place that can insert thread in order of MEMBER value, based on OP 
 	 OP == > : ascending order, OP == < : descending order */
@@ -176,7 +159,6 @@ int thread_get_load_avg (void);
 	list_insert(e, &THREAD->THRELEM);																				\
 } while (0)
 
-<<<<<<< HEAD
 void thread_sleep(int64_t tick);
 void thread_wake(int64_t tick);
 
@@ -184,25 +166,5 @@ void priority_donate(struct thread* holder);
 void priority_release(struct list* waiters);
 void thread_set_waitstat(struct thread* t, uint8_t stat);
 /* Project1-Thread Implementation End */
-=======
-=======
->>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
-/* Project1-Thread Implementation*/
-void thread_sleep(int64_t tick);
-void thread_wake(int64_t tick);
-/* Project1-Thread Implementation*/
-<<<<<<< HEAD
->>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
-=======
->>>>>>> e28d30a... Implement alarm by list of speeling_thread struct
-=======
-void thread_sleep(int64_t tick);
-void thread_wake(int64_t tick);
-
-void priority_donate(struct thread* holder);
-void priority_release(struct list* waiters);
-void thread_set_waitstat(struct thread* t, uint8_t stat);
-/* Project1-Thread Implementation End */
->>>>>>> ba83a3e... daoate priority by store in donor list
 
 #endif /* threads/thread.h */
