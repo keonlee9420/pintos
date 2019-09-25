@@ -93,6 +93,12 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    /* Project#1 implementation S */
+    
+    int64_t wakeup_ticks;		/* Pivot ticks when the thread needs to wake  up */
+    
+    /* Project#1 implementation E */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -118,6 +124,13 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+
+/* Project#1 implementation S */
+
+void sleep_thread (int64_t wakeup_ticks);
+void wake_thread (int64_t cur_ticks);
+
+/* Project#1 implementation E */
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);

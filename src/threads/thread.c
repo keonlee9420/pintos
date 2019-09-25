@@ -24,6 +24,13 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* Project#1 implementation S */
+
+/* List of sleeping threads */
+static struct list slept_list;
+
+/* Project#1 implementation E */
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -53,6 +60,11 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+/* Project#1 implementation S */
+
+static unsigned slept_list_size; /* size of the slept list */
+
+/* Project#1 implementation E */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -92,6 +104,12 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+/* Project#1 implementation E */
+
+  list_init (&slept_list);
+
+/* Project#1 implementation E */
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -242,6 +260,52 @@ thread_unblock (struct thread *t)
   intr_set_level (old_level);
 }
 
+/* Project#1 implementation S */
+
+static bool
+should_wakeup_first (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
+{
+  struct thread *t1 = list_entry (a, struct thread, elem);
+  struct thread *t2 = list_entry (b, struct thread, elem);
+  return t1->wakeup_ticks < t2->wakeup_ticks;
+}
+
+void
+sleep_thread (int64_t pivot_ticks)
+{
+  /* set current thread as sleeping during pivot_ticks */
+  enum intr_level old_level = intr_disable ();
+  struct thread *cur = thread_current ();  
+  cur->wakeup_ticks = pivot_ticks;
+
+  /* insert into slept_list */
+  list_insert_ordered (&slept_list, &cur->elem, should_wakeup_first, NULL);
+  slept_list_size++; 
+
+	/* block current thread */ 
+  thread_block ();
+  intr_set_level (old_level);
+}
+
+void
+wake_thread(int64_t cur_ticks)
+{
+  enum intr_level old_level = intr_disable ();
+  struct list_elem *e = list_begin(&slept_list);
+  while(slept_list_size){
+    struct thread *t = list_entry(e, struct thread, elem);
+    if(t->wakeup_ticks > cur_ticks)
+      break;
+    list_remove(e);
+		thread_unblock(t);
+    slept_list_size--;
+    e = list_begin(&slept_list);
+  }
+  intr_set_level (old_level);
+}
+
+/* Project#1 implementation E */
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -375,7 +439,7 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -463,7 +527,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
+  
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
