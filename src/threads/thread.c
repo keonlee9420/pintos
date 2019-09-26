@@ -218,7 +218,12 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  	
+  /* Project1 implementation S */
+	
+	make_the_most_urgent_thread_run ();
+	
+	/* Project1 implementation E */
   return tid;
 }
 
@@ -238,6 +243,39 @@ thread_block (void)
   schedule ();
 }
 
+/* Project1 implementation S */
+
+static bool
+has_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *t1 = list_entry (a, struct thread, elem);
+	struct thread *t2 = list_entry (b, struct thread, elem);
+	return t1->priority > t2->priority;
+}
+
+static bool
+is_more_urgent_than (const struct thread *higher, const struct thread *lower)
+{
+	return higher->priority > lower->priority;
+}
+
+void
+make_the_most_urgent_thread_run (void)
+{
+	if (!list_empty (&ready_list))
+	{	
+		struct thread *cur = thread_current ();
+		struct list_elem *front_elem = list_front (&ready_list);
+		struct thread *front = list_entry (front_elem, struct thread, elem);
+		if (!is_more_urgent_than (cur, front))
+		{
+			thread_yield ();
+		}
+	}
+}
+
+/* Project1 implementation E */
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -255,8 +293,13 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
-  t->status = THREAD_READY;
+  //list_push_back (&ready_list, &t->elem);
+  /* Project1 implementation S */
+	
+	list_insert_ordered (&ready_list, &t->elem, has_higher_priority, NULL);
+	
+	/* Project1 implementation E */
+	t->status = THREAD_READY;
   intr_set_level (old_level);
 }
 
@@ -372,7 +415,12 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    //list_push_back (&ready_list, &cur->elem);
+  	/* Project1 implementation S */
+	
+		list_insert_ordered (&ready_list, &cur->elem, has_higher_priority, NULL);
+	
+		/* Project1 implementation E */
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -400,6 +448,11 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  /* Project1 implementation S */
+	
+	make_the_most_urgent_thread_run ();
+	
+	/* Project1 implementation E */
 }
 
 /* Returns the current thread's priority. */

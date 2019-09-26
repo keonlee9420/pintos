@@ -123,6 +123,11 @@ typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
+/* Project#1 implementation S */
+
+void make_the_most_urgent_thread_run (void);
+
+/* Project#1 implementation S */
 void thread_unblock (struct thread *);
 
 /* Project#1 implementation S */
