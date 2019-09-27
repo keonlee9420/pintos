@@ -68,8 +68,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      insert_thread(sema->waiters, thread_current(), elem, priority, <); 
-			thread_set_waitstat(thread_current(), 2);
+			list_push_back(&sema->waiters, &thread_current()->elem);
 			thread_block ();
     }
   sema->value--;
@@ -114,14 +113,13 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-	sema->value++;
   if(!list_empty (&sema->waiters))
 	{
 		struct thread* t = list_entry (list_pop_front (&sema->waiters), 
 																		struct thread, elem);
-		thread_set_waitstat(t, 0);
 		thread_unblock(t);
   }
+	sema->value++;
 	intr_set_level (old_level);
 }
 
@@ -203,15 +201,8 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  //sema_down (&lock->semaphore);
 	old_level = intr_disable();
-	while(!lock_try_acquire(lock))
-	{
-		insert_thread(lock->semaphore.waiters, thread_current(), elem, priority, <);
-		priority_donate(lock->holder);
-		thread_set_waitstat(thread_current(), 1);
-		thread_block();		
-	}
+  sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 	intr_set_level(old_level);
 }
@@ -247,7 +238,6 @@ lock_release (struct lock *lock)
 	ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 	
-	priority_release(&lock->semaphore.waiters);
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -305,7 +295,6 @@ void
 cond_wait (struct condition *cond, struct lock *lock) 
 {
   struct semaphore_elem waiter;
-	struct list_elem* e;
 
   ASSERT (cond != NULL);
   ASSERT (lock != NULL);
@@ -313,15 +302,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-	for(e = list_begin(&cond->waiters); e != list_end(&cond->waiters); 
-			e = list_next(e))
-	{
-		struct semaphore* sema = &list_entry(e, struct semaphore_elem, elem)->semaphore;
-		struct thread* t = list_entry(list_front(&sema->waiters), struct thread, elem);
-		if(t->priority < thread_get_priority())
-			break;
-	}
-	list_insert(e, &waiter.elem);
+	list_push_back(&cond->waiters, &waiter.elem);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
