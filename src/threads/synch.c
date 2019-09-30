@@ -193,12 +193,12 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
-  ASSERT (lock != NULL);
+ 
+	ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
 	/* Project1 S */
-	
 	enum intr_level old_level = intr_disable ();
 	// donate priority if holder has lower priority than current thread
   if (lock->holder != NULL) 
@@ -251,12 +251,13 @@ lock_release (struct lock *lock)
 	/* Project1 S */	
 
 	enum intr_level old_level = intr_disable ();
-	struct thread *holder = lock->holder;
+	struct list *waiters = &lock->semaphore.waiters;
+	struct thread *donee = thread_current ();
 	// return donated priority and setup with previous priority
-	if (!list_empty (&holder->donor_list))
+	if (!list_empty (&donee->donor_list))
 	{
 		//printf ("return_priority is activated!\n");
-		return_priority (holder);
+		return_priority (waiters);
 	}
 	sema_up (&lock->semaphore);
   make_the_most_urgent_thread_run ();

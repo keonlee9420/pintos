@@ -132,7 +132,8 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 /* Project1 S  */
 
 void donate_priority (struct thread *donee);
-void return_priority (struct thread *donee);
+struct thread *is_this_waiter_donor_then_return_donorelem (struct thread *waiter, struct thread *donee);
+void return_priority (struct list *waiters);
 
 /* Project1 E */
 

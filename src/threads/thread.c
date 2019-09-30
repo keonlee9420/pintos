@@ -232,13 +232,11 @@ thread_create (const char *name, int priority,
 void
 donate_priority (struct thread *donee)
 {
-	
-	printf ("NAME OF DONEE THREAD: %s\n", donee->name);
 	enum intr_level old_level = intr_disable ();
 
 	struct thread *donor = thread_current ();
 	// donate priority from donor to donee
-	donee->priority = donor->origin_priority;
+	donee->priority = donor->priority;
 	// sort ready list due to above priority change
 	list_sort (&ready_list, has_higher_priority, NULL);
 	// push donor to donee's donor_list
@@ -247,16 +245,48 @@ donate_priority (struct thread *donee)
 	intr_set_level (old_level);
 }
 
+struct thread *
+is_this_waiter_donor_then_return_donorelem (struct thread *waiter, struct thread *donee)
+{
+	struct list *donor_list = &donee->donor_list;
+	struct thread *donor = NULL;
+	struct list_elem *e;
+	for (e = list_begin (donor_list); e != list_end (donor_list); e = list_next (e))
+	{
+		struct thread *te = list_entry (e, struct thread, donorelem);
+		if (te->tid == waiter->tid)
+		{
+			donor = te;
+			break;
+		}
+	}
+	return donor;
+}
+
 void
-return_priority (struct thread *donee)
+return_priority (struct list *waiters)
 {
 	enum intr_level old_level = intr_disable ();
 
-	struct list_elem *prev_donor_elem = list_pop_front (&donee->donor_list);
-	struct thread *prev_donor = list_entry (prev_donor_elem, struct thread, donorelem);	
-	//printf("RETURN: donor_list size after pop: %d\n", list_size (&donee->donor_list));
-	donee->priority = donee->origin_priority;
-	
+	struct thread *donee = thread_current ();
+	//remove all donor in donor list which are also in waiters
+	struct list_elem *e;
+	for (e = list_begin (waiters); e != list_end (waiters); e = list_next (e))
+	{
+		struct thread *waiter = list_entry (e, struct thread, elem);
+	 	struct thread *donor;		
+		if ((donor = is_this_waiter_donor_then_return_donorelem (waiter, donee)) != NULL) 
+		{
+			list_remove (&donor->donorelem);
+		}
+	}	
+	if (list_empty (&donee->donor_list))
+		donee->priority = donee->origin_priority;
+	else
+	{
+		list_sort (&donee->donor_list, has_higher_priority, NULL);
+		donee->priority = list_entry (list_front (&donee->donor_list), struct thread, donorelem)->priority;
+	}
 	intr_set_level (old_level);
 }
 
