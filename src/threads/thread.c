@@ -239,10 +239,25 @@ donate_priority (struct thread *donee)
 	donee->priority = donor->priority;
 	// sort ready list due to above priority change
 	list_sort (&ready_list, has_higher_priority, NULL);
+	
+	// set donee (one of donor's members) to donee
+	donor->donee = donee;
 	// push donor to donee's donor_list
 	list_push_front (&donee->donor_list, &donor->donorelem);
 	
 	intr_set_level (old_level);
+}
+
+void
+donate_priority_for_blocked_thread (struct thread *donee, int priority)
+{
+	enum intr_level old_level = intr_disable ();
+
+	// donate priority from donor to donee
+	donee->priority = priority;
+	// sort ready list due to above priority change
+	list_sort (&ready_list, has_higher_priority, NULL);
+	intr_set_level (old_level);	
 }
 
 struct thread *
@@ -269,6 +284,7 @@ return_priority (struct list *waiters)
 	enum intr_level old_level = intr_disable ();
 
 	struct thread *donee = thread_current ();
+	struct thread *first_waiter_donor = list_begin (waiters);
 	//remove all donor in donor list which are also in waiters
 	struct list_elem *e;
 	for (e = list_begin (waiters); e != list_end (waiters); e = list_next (e))
@@ -277,9 +293,11 @@ return_priority (struct list *waiters)
 	 	struct thread *donor;		
 		if ((donor = is_this_waiter_donor_then_return_donorelem (waiter, donee)) != NULL) 
 		{
+			// set donor's donee to NULL
+			donor->donee = NULL;
 			list_remove (&donor->donorelem);
 		}
-	}	
+	}
 	if (list_empty (&donee->donor_list))
 		donee->priority = donee->origin_priority;
 	else
@@ -653,6 +671,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
 	/* Project1 S  */
 
+	t->donee = NULL;
 	t->origin_priority = priority;
 	list_init (&t->donor_list);
 
