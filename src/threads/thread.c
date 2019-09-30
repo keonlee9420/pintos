@@ -227,6 +227,41 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
+/* Project1 S */
+
+void
+donate_priority (struct thread *donee)
+{
+	
+	printf ("NAME OF DONEE THREAD: %s\n", donee->name);
+	enum intr_level old_level = intr_disable ();
+
+	struct thread *donor = thread_current ();
+	// donate priority from donor to donee
+	donee->priority = donor->origin_priority;
+	// sort ready list due to above priority change
+	list_sort (&ready_list, has_higher_priority, NULL);
+	// push donor to donee's donor_list
+	list_push_front (&donee->donor_list, &donor->donorelem);
+	
+	intr_set_level (old_level);
+}
+
+void
+return_priority (struct thread *donee)
+{
+	enum intr_level old_level = intr_disable ();
+
+	struct list_elem *prev_donor_elem = list_pop_front (&donee->donor_list);
+	struct thread *prev_donor = list_entry (prev_donor_elem, struct thread, donorelem);	
+	//printf("RETURN: donor_list size after pop: %d\n", list_size (&donee->donor_list));
+	donee->priority = donee->origin_priority;
+	
+	intr_set_level (old_level);
+}
+
+/* Project1 E */
+
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -245,7 +280,7 @@ thread_block (void)
 
 /* Project1 implementation S */
 
-static bool
+bool
 has_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
 	struct thread *t1 = list_entry (a, struct thread, elem);
@@ -253,10 +288,20 @@ has_higher_priority (const struct list_elem *a, const struct list_elem *b, void 
 	return t1->priority > t2->priority;
 }
 
-static bool
+bool
 is_more_urgent_than (const struct thread *higher, const struct thread *lower)
 {
 	return higher->priority > lower->priority;
+}
+
+bool
+current_is_more_urgent_than_front (void)
+{
+	ASSERT(!list_empty (&ready_list));
+	struct thread *cur = thread_current ();
+	struct list_elem *front_elem = list_front (&ready_list);
+	struct thread *front = list_entry (front_elem, struct thread, elem);
+	return is_more_urgent_than (cur, front);
 }
 
 void
@@ -264,10 +309,7 @@ make_the_most_urgent_thread_run (void)
 {
 	if (!list_empty (&ready_list))
 	{	
-		struct thread *cur = thread_current ();
-		struct list_elem *front_elem = list_front (&ready_list);
-		struct thread *front = list_entry (front_elem, struct thread, elem);
-		if (!is_more_urgent_than (cur, front))
+		if (!current_is_more_urgent_than_front ())
 		{
 			thread_yield ();
 		}
@@ -579,6 +621,12 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+	/* Project1 S  */
+
+	t->origin_priority = priority;
+	list_init (&t->donor_list);
+
+  /* Project1 E  */
   t->magic = THREAD_MAGIC;
   
   old_level = intr_disable ();
