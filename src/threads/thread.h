@@ -88,6 +88,11 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+		/* Project1 S */
+
+    int origin_priority;               /* Origin Priority. */
+
+		/* Project1 E */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -95,6 +100,8 @@ struct thread
 
     /* Project#1 implementation S */
     
+		struct list_elem donorelem;
+		struct list donor_list;
     int64_t wakeup_ticks;		/* Pivot ticks when the thread needs to wake  up */
     
     /* Project#1 implementation E */
@@ -122,12 +129,23 @@ void thread_print_stats (void);
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
+/* Project1 S  */
+
+void donate_priority (struct thread *donee);
+struct thread *is_this_waiter_donor_then_return_donorelem (struct thread *waiter, struct thread *donee);
+void return_priority (struct list *waiters);
+
+/* Project1 E */
+
 void thread_block (void);
 /* Project#1 implementation S */
 
+bool has_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool is_more_urgent_than (const struct thread *higher, const struct thread *lower);
+bool current_is_more_urgent_than_front (void);
 void make_the_most_urgent_thread_run (void);
 
-/* Project#1 implementation S */
+/* Project#1 implementation E */
 void thread_unblock (struct thread *);
 
 /* Project#1 implementation S */
