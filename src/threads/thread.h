@@ -92,7 +92,8 @@ struct thread
 		
     int origin_priority;               /* Origin Priority. */
     struct thread *donee;               /* donee of this thread when it exists */
-  
+ 		struct list *sema_waiters;
+ 
 		/* Project1 E */
     struct list_elem allelem;           /* List element for all threads list. */
 

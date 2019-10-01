@@ -240,7 +240,11 @@ donate_priority (struct thread *donee)
 	donee->priority = donor->priority;
 	// sort ready list due to above priority change
 	list_sort (&ready_list, has_higher_priority, NULL);
-	
+	// sort sema_waiters due to above priority if donee is BLOCKED
+	if (donee->status == THREAD_BLOCKED)
+	{
+		list_sort (donee->sema_waiters, has_higher_priority, NULL);
+	}	
 	// set donee (one of donor's members) to donee
 	donor->donee = donee;
 	// push donor to donee's donor_list
