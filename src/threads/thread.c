@@ -60,11 +60,11 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
-/* Project#1 implementation S */
+/* Project1 S */
 
 static unsigned slept_list_size; /* size of the slept list */
 
-/* Project#1 implementation E */
+/* Project1 E */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
