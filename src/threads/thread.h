@@ -88,25 +88,27 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+		
 		/* Project1 S */
 		
-    int origin_priority;               /* Origin Priority. */
+    int origin_priority;               	/* Origin Priority. */
     struct thread *donee;               /* donee of this thread when it exists */
- 		struct list *sema_waiters;
+ 		struct list *sema_waiters;					/* Determinator for synchronization status */
  
 		/* Project1 E */
-    struct list_elem allelem;           /* List element for all threads list. */
+    
+		struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-    /* Project#1 implementation S */
+    /* Project1 S */
     
-		struct list_elem donorelem;
-		struct list donor_list;
-    int64_t wakeup_ticks;		/* Pivot ticks when the thread needs to wake  up */
+		struct list_elem donorelem;					/* List element for donor list */
+		struct list donor_list;							/* List of donor */
+    int64_t wakeup_ticks;								/* Pivot ticks when the thread needs to wake  up */
     
-    /* Project#1 implementation E */
+    /* Project1 E */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -131,32 +133,10 @@ void thread_print_stats (void);
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
-/* Project1 S  */
-
-void donate_priority (struct thread *donee);
-void donate_priority_for_blocked_thread (struct thread *donee, int priority);
-struct thread *is_this_waiter_donor_then_return_donorelem (struct thread *waiter, struct thread *donee);
-void return_priority (struct list *waiters);
-
-/* Project1 E */
 
 void thread_block (void);
-/* Project#1 implementation S */
-
-bool has_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
-bool is_more_urgent_than (const struct thread *higher, const struct thread *lower);
-bool current_is_more_urgent_than_front (void);
-void make_the_most_urgent_thread_run (void);
-
-/* Project#1 implementation E */
 void thread_unblock (struct thread *);
 
-/* Project#1 implementation S */
-
-void sleep_thread (int64_t wakeup_ticks);
-void wake_thread (int64_t cur_ticks);
-
-/* Project#1 implementation E */
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -176,5 +156,22 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Project1 S */
+
+void sleep_thread (int64_t wakeup_ticks);
+void wake_thread (int64_t cur_ticks);
+
+void donate_priority (struct thread *donee);
+void donate_priority_for_blocked_thread (struct thread *donee, int priority);
+struct thread *intersect_waiter_donor (struct thread *waiter, struct thread *donee);
+void return_priority (struct list *waiters);
+
+bool has_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool is_more_urgent_than (const struct thread *higher, const struct thread *lower);
+bool current_is_more_urgent_than_front (void);
+void make_the_most_urgent_thread_run (void);
+
+/* Project1 E */
 
 #endif /* threads/thread.h */

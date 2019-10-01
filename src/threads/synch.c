@@ -69,7 +69,6 @@ sema_down (struct semaphore *sema)
   thread_current ()->sema_waiters = &sema->waiters;
 	while (sema->value == 0) 
     {
-      //list_push_back (&sema->waiters, &thread_current ()->elem);
       /* Project1 S */
 			
 			list_insert_ordered (&sema->waiters, &thread_current ()->elem, has_higher_priority, NULL);
@@ -121,11 +120,10 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
 	sema->value++;
   if (!list_empty (&sema->waiters))
-	{ 
-	  struct thread *waiter = list_entry (list_pop_front (&sema->waiters), 
-																											struct thread, elem);
-		thread_unblock (waiter);
-	}
+	  thread_unblock(list_entry (list_pop_front (&sema->waiters), 
+																					struct thread, elem));
+	
+	/* Reschedule for unblocked thread */
 	make_the_most_urgent_thread_run ();
 	intr_set_level (old_level);
 }
@@ -210,6 +208,7 @@ lock_acquire (struct lock *lock)
 	/* Project1 S */
 	enum intr_level old_level = intr_disable ();
 	struct thread *holder = lock->holder;
+	
 	// donate priority if holder has lower priority than current thread
   if (holder != NULL) 
 	{
@@ -217,6 +216,8 @@ lock_acquire (struct lock *lock)
 		{
 			struct thread *donee = holder;
 			donate_priority (donee);
+	
+			// Donate to nested thread iteratively, if exists
 			if (donee->status == THREAD_BLOCKED)
 			{
 				donee = donee->donee;
@@ -271,6 +272,7 @@ lock_release (struct lock *lock)
 	enum intr_level old_level = intr_disable ();
 	struct list *waiters = &lock->semaphore.waiters;
 	struct thread *donee = thread_current ();
+	
 	// return donated priority and setup with previous priority
 	if (!list_empty (&donee->donor_list))
 	{
@@ -332,6 +334,8 @@ cond_init (struct condition *cond)
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+
+/* Comparison helper function for Monitor lock */
 static bool
 has_higher_priority_for_condvar (const struct list_elem *waiter_dot_elem UNUSED, const struct list_elem *cond_waiters_elem, void *aux UNUSED)
 {
