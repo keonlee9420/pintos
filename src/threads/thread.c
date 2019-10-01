@@ -24,12 +24,12 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
-/* Project#1 implementation S */
+/* Project1 S */
 
 /* List of sleeping threads */
 static struct list slept_list;
 
-/* Project#1 implementation E */
+/* Project1 E */
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -227,91 +227,6 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-/* Project1 S */
-
-void
-donate_priority (struct thread *donee)
-{
-	enum intr_level old_level = intr_disable ();
-
-	struct thread *donor = thread_current ();
-	// donate priority from donor to donee
-	donee->priority = donor->priority;
-	// sort ready list due to above priority change
-	list_sort (&ready_list, has_higher_priority, NULL);
-	// sort sema_waiters due to above priority if donee is BLOCKED
-	if (donee->status == THREAD_BLOCKED)
-	{
-		list_sort (donee->sema_waiters, has_higher_priority, NULL);
-	}	
-	// set donee (one of donor's members) to donee
-	donor->donee = donee;
-	// push donor to donee's donor_list
-	list_push_front (&donee->donor_list, &donor->donorelem);
-	
-	intr_set_level (old_level);
-}
-
-void
-donate_priority_for_blocked_thread (struct thread *donee, int priority)
-{
-	enum intr_level old_level = intr_disable ();
-
-	// donate priority from donor to donee
-	donee->priority = priority;
-	// sort ready list due to above priority change
-	list_sort (&ready_list, has_higher_priority, NULL);
-	intr_set_level (old_level);	
-}
-
-struct thread *
-is_this_waiter_donor_then_return_donorelem (struct thread *waiter, struct thread *donee)
-{
-	struct list *donor_list = &donee->donor_list;
-	struct thread *donor = NULL;
-	struct list_elem *e;
-	for (e = list_begin (donor_list); e != list_end (donor_list); e = list_next (e))
-	{
-		struct thread *te = list_entry (e, struct thread, donorelem);
-		if (te->tid == waiter->tid)
-		{
-			donor = te;
-			break;
-		}
-	}
-	return donor;
-}
-
-void
-return_priority (struct list *waiters)
-{
-	enum intr_level old_level = intr_disable ();
-
-	struct thread *donee = thread_current ();
-	//remove all donor in donor list which are also in waiters
-	struct list_elem *e;
-	for (e = list_begin (waiters); e != list_end (waiters); e = list_next (e))
-	{
-		struct thread *waiter = list_entry (e, struct thread, elem);
-	 	struct thread *donor;		
-		if ((donor = is_this_waiter_donor_then_return_donorelem (waiter, donee)) != NULL) 
-		{
-			// set donor's donee to NULL
-			donor->donee = NULL;
-			list_remove (&donor->donorelem);
-		}
-	}
-	if (list_empty (&donee->donor_list))
-		donee->priority = donee->origin_priority;
-	else
-	{
-		list_sort (&donee->donor_list, has_higher_priority, NULL);
-		donee->priority = list_entry (list_front (&donee->donor_list), struct thread, donorelem)->priority;
-	}
-	intr_set_level (old_level);
-}
-
-/* Project1 E */
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -329,45 +244,6 @@ thread_block (void)
   schedule ();
 }
 
-/* Project1 implementation S */
-
-bool
-has_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
-	struct thread *t1 = list_entry (a, struct thread, elem);
-	struct thread *t2 = list_entry (b, struct thread, elem);
-	return t1->priority > t2->priority;
-}
-
-bool
-is_more_urgent_than (const struct thread *higher, const struct thread *lower)
-{
-	return higher->priority > lower->priority;
-}
-
-bool
-current_is_more_urgent_than_front (void)
-{
-	ASSERT(!list_empty (&ready_list));
-	struct thread *cur = thread_current ();
-	struct list_elem *front_elem = list_front (&ready_list);
-	struct thread *front = list_entry (front_elem, struct thread, elem);
-	return is_more_urgent_than (cur, front);
-}
-
-void
-make_the_most_urgent_thread_run (void)
-{
-	if (!list_empty (&ready_list))
-	{	
-		if (!current_is_more_urgent_than_front ())
-		{
-			thread_yield ();
-		}
-	}
-}
-
-/* Project1 implementation E */
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -396,51 +272,6 @@ thread_unblock (struct thread *t)
   intr_set_level (old_level);
 }
 
-/* Project#1 implementation S */
-
-static bool
-should_wakeup_first (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
-{
-  struct thread *t1 = list_entry (a, struct thread, elem);
-  struct thread *t2 = list_entry (b, struct thread, elem);
-  return t1->wakeup_ticks < t2->wakeup_ticks;
-}
-
-void
-sleep_thread (int64_t pivot_ticks)
-{
-  /* set current thread as sleeping during pivot_ticks */
-  enum intr_level old_level = intr_disable ();
-  struct thread *cur = thread_current ();  
-  cur->wakeup_ticks = pivot_ticks;
-
-  /* insert into slept_list */
-  list_insert_ordered (&slept_list, &cur->elem, should_wakeup_first, NULL);
-  slept_list_size++; 
-
-	/* block current thread */ 
-  thread_block ();
-  intr_set_level (old_level);
-}
-
-void
-wake_thread(int64_t cur_ticks)
-{
-  enum intr_level old_level = intr_disable ();
-  struct list_elem *e = list_begin(&slept_list);
-  while(slept_list_size){
-    struct thread *t = list_entry(e, struct thread, elem);
-    if(t->wakeup_ticks > cur_ticks)
-      break;
-    list_remove(e);
-		thread_unblock(t);
-    slept_list_size--;
-    e = list_begin(&slept_list);
-  }
-  intr_set_level (old_level);
-}
-
-/* Project#1 implementation E */
 
 /* Returns the name of the running thread. */
 const char *
@@ -807,3 +638,173 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Project1 S */
+
+void
+donate_priority (struct thread *donee)
+{
+	enum intr_level old_level = intr_disable ();
+
+	struct thread *donor = thread_current ();
+	// donate priority from donor to donee
+	donee->priority = donor->priority;
+	// sort ready list due to above priority change
+	list_sort (&ready_list, has_higher_priority, NULL);
+	// sort sema_waiters due to above priority if donee is BLOCKED
+	if (donee->status == THREAD_BLOCKED)
+	{
+		list_sort (donee->sema_waiters, has_higher_priority, NULL);
+	}	
+	// set donee (one of donor's members) to donee
+	donor->donee = donee;
+	// push donor to donee's donor_list
+	list_push_front (&donee->donor_list, &donor->donorelem);
+	
+	intr_set_level (old_level);
+}
+
+void
+donate_priority_for_blocked_thread (struct thread *donee, int priority)
+{
+	enum intr_level old_level = intr_disable ();
+
+	// donate priority from donor to donee
+	donee->priority = priority;
+	// sort ready list due to above priority change
+	list_sort (&ready_list, has_higher_priority, NULL);
+	intr_set_level (old_level);	
+}
+
+struct thread *
+is_this_waiter_donor_then_return_donorelem (struct thread *waiter, struct thread *donee)
+{
+	struct list *donor_list = &donee->donor_list;
+	struct thread *donor = NULL;
+	struct list_elem *e;
+	for (e = list_begin (donor_list); e != list_end (donor_list); e = list_next (e))
+	{
+		struct thread *te = list_entry (e, struct thread, donorelem);
+		if (te->tid == waiter->tid)
+		{
+			donor = te;
+			break;
+		}
+	}
+	return donor;
+}
+
+void
+return_priority (struct list *waiters)
+{
+	enum intr_level old_level = intr_disable ();
+
+	struct thread *donee = thread_current ();
+	//remove all donor in donor list which are also in waiters
+	struct list_elem *e;
+	for (e = list_begin (waiters); e != list_end (waiters); e = list_next (e))
+	{
+		struct thread *waiter = list_entry (e, struct thread, elem);
+	 	struct thread *donor;		
+		if ((donor = is_this_waiter_donor_then_return_donorelem (waiter, donee)) != NULL) 
+		{
+			// set donor's donee to NULL
+			donor->donee = NULL;
+			list_remove (&donor->donorelem);
+		}
+	}
+	if (list_empty (&donee->donor_list))
+		donee->priority = donee->origin_priority;
+	else
+	{
+		list_sort (&donee->donor_list, has_higher_priority, NULL);
+		donee->priority = list_entry (list_front (&donee->donor_list), struct thread, donorelem)->priority;
+	}
+	intr_set_level (old_level);
+}
+
+/* Project1 E */
+/* Project1 implementation S */
+
+bool
+has_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *t1 = list_entry (a, struct thread, elem);
+	struct thread *t2 = list_entry (b, struct thread, elem);
+	return t1->priority > t2->priority;
+}
+
+bool
+is_more_urgent_than (const struct thread *higher, const struct thread *lower)
+{
+	return higher->priority > lower->priority;
+}
+
+bool
+current_is_more_urgent_than_front (void)
+{
+	ASSERT(!list_empty (&ready_list));
+	struct thread *cur = thread_current ();
+	struct list_elem *front_elem = list_front (&ready_list);
+	struct thread *front = list_entry (front_elem, struct thread, elem);
+	return is_more_urgent_than (cur, front);
+}
+
+void
+make_the_most_urgent_thread_run (void)
+{
+	if (!list_empty (&ready_list))
+	{	
+		if (!current_is_more_urgent_than_front ())
+		{
+			thread_yield ();
+		}
+	}
+}
+
+/* Project1 implementation E */
+/* Project#1 implementation S */
+
+static bool
+should_wakeup_first (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
+{
+  struct thread *t1 = list_entry (a, struct thread, elem);
+  struct thread *t2 = list_entry (b, struct thread, elem);
+  return t1->wakeup_ticks < t2->wakeup_ticks;
+}
+
+void
+sleep_thread (int64_t pivot_ticks)
+{
+  /* set current thread as sleeping during pivot_ticks */
+  enum intr_level old_level = intr_disable ();
+  struct thread *cur = thread_current ();  
+  cur->wakeup_ticks = pivot_ticks;
+
+  /* insert into slept_list */
+  list_insert_ordered (&slept_list, &cur->elem, should_wakeup_first, NULL);
+  slept_list_size++; 
+
+	/* block current thread */ 
+  thread_block ();
+  intr_set_level (old_level);
+}
+
+void
+wake_thread(int64_t cur_ticks)
+{
+  enum intr_level old_level = intr_disable ();
+  struct list_elem *e = list_begin(&slept_list);
+  while(slept_list_size){
+    struct thread *t = list_entry(e, struct thread, elem);
+    if(t->wakeup_ticks > cur_ticks)
+      break;
+    list_remove(e);
+		thread_unblock(t);
+    slept_list_size--;
+    e = list_begin(&slept_list);
+  }
+  intr_set_level (old_level);
+}
+
+/* Project#1 implementation E */
