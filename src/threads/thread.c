@@ -285,7 +285,6 @@ return_priority (struct list *waiters)
 	enum intr_level old_level = intr_disable ();
 
 	struct thread *donee = thread_current ();
-	struct thread *first_waiter_donor = list_begin (waiters);
 	//remove all donor in donor list which are also in waiters
 	struct list_elem *e;
 	for (e = list_begin (waiters); e != list_end (waiters); e = list_next (e))
@@ -388,7 +387,7 @@ thread_unblock (struct thread *t)
   /* Project1 implementation S */
 	
 	list_insert_ordered (&ready_list, &t->elem, has_higher_priority, NULL);
-	
+		
 	/* Project1 implementation E */
 	t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -538,12 +537,20 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  /* Project1 implementation S */
+  /* Project1 S */
+ 
+	struct thread *current = thread_current ();	
 	
+	int prev_priority = current->priority;
+	current->priority = new_priority;	
+	if (!list_empty (&current->donor_list) && prev_priority > new_priority)
+	{
+		current->priority = prev_priority;	
+	}
+	current->origin_priority = new_priority;
 	make_the_most_urgent_thread_run ();
 	
-	/* Project1 implementation E */
+	/* Project1 E */
 }
 
 /* Returns the current thread's priority. */
