@@ -93,6 +93,10 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+		/* Project1 S */
+		int64_t waketick;										/* Wake-up tick */
+		/* Project1 E */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -137,5 +141,10 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Project1 S */
+void alarm_sleep(int64_t dest);
+void alarm_wake(int64_t cur_tick);
+/* Projcet1 E */
 
 #endif /* threads/thread.h */

@@ -71,6 +71,11 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/* Project1 S */
+static struct list sleep_list;
+static struct lock sleep_lock;
+/* Project1 E */
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -92,6 +97,10 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+	/* Project1 S */
+	lock_init(&sleep_lock);
+	list_init(&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -582,3 +591,56 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Project1 S */
+/* Compare waketime of two thread */
+static bool 
+compare_waketick(const struct list_elem* a, 
+								 const struct list_elem* b, void* aux UNUSED)
+{
+	return list_entry(a, struct thread, elem)->waketick < 
+				 list_entry(b, struct thread, elem)->waketick;
+}
+
+/* Block itself until waketime
+	 Set alarm for DEST, insert thread into sleeping list, then block */
+void 
+alarm_sleep(int64_t dest)
+{
+	enum intr_level old_level;
+	struct thread* cur = thread_current();
+
+	cur->waketick = dest;
+
+	lock_acquire(&sleep_lock);
+	list_insert_ordered(&sleep_list, &cur->elem, 
+											compare_waketick, NULL);
+	lock_release(&sleep_lock);
+
+	old_level = intr_disable();
+	thread_block();
+	intr_set_level(old_level);
+}
+
+/* Wake if alarm time is up 
+	 Search from front, earliest wakeup thread in ascending order list */
+void 
+alarm_wake(int64_t cur_tick)
+{
+	enum intr_level old_level = intr_disable();
+	struct list_elem* e;
+
+	for(e = list_begin(&sleep_list); e != list_end(&sleep_list); 
+			e = list_begin(&sleep_list))
+	{
+		struct thread* t = list_entry(e, struct thread, elem);
+		if(t->waketick > cur_tick)
+			break;
+		
+		list_remove(e);
+		thread_unblock(t);
+	}
+	
+	intr_set_level(old_level);
+}
+/* Project1 E */
