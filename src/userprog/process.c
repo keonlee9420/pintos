@@ -17,9 +17,13 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+/* Project2 S */
+#include "devices/timer.h"
+/* Project2 E */
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static char* get_file_title(const char* file_name);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -38,9 +42,15 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+	/* Project2 S */
+	char* file_title = get_file_title(file_name);	
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  tid = thread_create (file_title, PRI_DEFAULT, start_process, fn_copy);
+	palloc_free_page(file_title);
+	/* Project2 E */
+  
+	if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
 }
@@ -88,7 +98,8 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  timer_sleep(500);
+	return -1;
 }
 
 /* Free the current process's resources. */
@@ -195,7 +206,10 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+/* Project2 S */
+static void* pass_argument(const char* cmdline);
+static bool setup_stack (void **esp, const char* cmdline);
+/* Project2 E */
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -214,15 +228,21 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
-
-  /* Allocate and activate page directory. */
+  
+	/* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
 
+	/* Project2 S */
+	/* Get file title */
+	char* file_title = get_file_title(file_name);
+
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (file_title);
+	palloc_free_page(file_title);
+	/* Project2 E */
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -302,7 +322,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+	/* Project2 S */
+  if (!setup_stack (esp, file_name))
+	/* Project2 E */
     goto done;
 
   /* Start address. */
@@ -426,8 +448,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
+/* Project2 S */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, const char* cmdline) 
+/* Project2 E */
 {
   uint8_t *kpage;
   bool success = false;
@@ -437,7 +461,9 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+				/* Project2 S */
+        *esp = pass_argument(cmdline);
+				/* Project2 E */
       else
         palloc_free_page (kpage);
     }
@@ -463,3 +489,62 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+/* Project2 S */
+/* Parse arguments, then stack up in proper order */
+static void* 
+pass_argument(const char* cmdline)
+{
+	char* cmd_copy = palloc_get_page(0);
+	char* saver = NULL;
+	void* esp = PHYS_BASE;
+	char* cmd_tok;
+	int argc = 0;
+	void** argv = palloc_get_page(0);
+	
+	strlcpy(cmd_copy, cmdline, PGSIZE);
+
+	/* Stack up command line, divided by deliminator */
+	for(cmd_tok = strtok_r(cmd_copy, " ", &saver); cmd_tok;
+			cmd_tok = strtok_r(NULL, " ", &saver))
+	{
+		size_t tok_size = strlen(cmd_tok);
+		esp -= tok_size + 1;
+		strlcpy(esp, cmd_tok, tok_size + 1);
+		argv[argc++] = esp;
+	}
+	argv[argc] = NULL;
+
+	palloc_free_page(cmd_copy);
+
+	/* Align word to multiple of 4 */
+	esp -= 4 - (int)(PHYS_BASE - esp) % 4;
+	
+	/* Stack up argv[0] ~ argv[argc] (== NULL) */
+	esp -= 4 * (argc + 1);
+	memcpy(esp, argv, 4 * (argc + 1));
+	palloc_free_page(argv);
+
+	/* Stack up argv */
+	argv = esp - 4;
+	*argv = esp;
+
+	/* Stack up argc */
+	esp -= 8;
+	memcpy(esp, &argc, 4);
+
+	return esp - 4;
+}
+
+/* Extract file title from whole command line 
+	 Warning! - must free title pointer after use of file title */
+static char* 
+get_file_title(const char* file_name)
+{
+	char* file_title = palloc_get_page(0);
+	char* saver = NULL;
+	strlcpy(file_title, file_name, PGSIZE);
+	return strtok_r(file_title, " ", &saver);
+}
+/* Project2 E */
+
