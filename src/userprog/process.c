@@ -20,6 +20,10 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+/* Project2 S */
+static void pass_argument(const char* cmdline, void** esp);
+static void parse_title(char* title, const char* file_name);
+/* Project2 E */
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -30,6 +34,11 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+	/* Project2 S */
+	char file_title[16];
+	
+	parse_title(file_title, file_name);
+	/* Project2 E */
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -39,8 +48,10 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+	/* Project2 S */
+  tid = thread_create (file_title, PRI_DEFAULT, start_process, fn_copy);
+  /* Project2 E */
+	if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
 }
@@ -59,7 +70,10 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+	/* Project2 S */
+  if((success = load (file_name, &if_.eip, &if_.esp)))
+		pass_argument(file_name, &if_.esp);
+	/* Project2 E */
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -88,6 +102,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+	alarm_sleep(500);
   return -1;
 }
 
@@ -214,6 +229,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+	/* Project2 S */
+	char file_title[16];
+
+	parse_title(file_title, file_name);
+	/* Project2 E */
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -222,7 +242,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+	/* Project2 S */
+  file = filesys_open (file_title);
+	/* Project2 E */
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -463,3 +485,57 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+/* Project2 S */
+/* Parse command line, 
+	 then stack up according to 80x86 convention */
+static void 
+pass_argument(const char* cmdline, void** esp)
+{
+	void** argv = palloc_get_page(0);
+	int argc = 0;
+	void* tmp_esp = PHYS_BASE;
+	char* saver; 
+	char* token;
+
+	/* Stack up arguments */
+	for(token = strtok_r((char*)cmdline, " ", &saver); token; 
+			token = strtok_r(NULL, " ", &saver))
+	{
+		size_t tok_size = strlen(token) + 1;
+		tmp_esp -= tok_size;
+		strlcpy(tmp_esp, token, tok_size);
+		argv[argc++] = tmp_esp;
+	}
+	argv[argc] = NULL;
+
+	/* Word alignment */
+	tmp_esp -= 4 - (int)(PHYS_BASE - tmp_esp) % 4;
+
+	/* Stack up argv pointers */
+	tmp_esp -= 4 * (argc + 1);
+	memcpy(tmp_esp, argv, 4 * (argc + 1));
+	palloc_free_page(argv);
+
+	/* Stack up argv, argc */
+	argv = tmp_esp - 4;
+	*argv = tmp_esp;
+
+	tmp_esp -= 8;
+	memcpy(tmp_esp, &argc, 4);
+
+	/* Save return address into ESP */
+	*esp = tmp_esp - 4;
+}
+
+static void 
+parse_title(char* title, const char* file_name)
+{
+	char* file_copy = palloc_get_page(0);
+	char* saver;
+	strlcpy(file_copy, file_name, PGSIZE);
+	strtok_r(file_copy, " ", &saver);
+	strlcpy(title, file_copy, 16);
+	palloc_free_page(file_copy);
+}
+
