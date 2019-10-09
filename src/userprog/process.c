@@ -30,23 +30,36 @@ void pass_argument (char *cmd_line, void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd_line) 
 {
   char *fn_copy;
   tid_t tid;
-
+	
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
-
-  /* Create a new thread to execute FILE_NAME. */
+  strlcpy (fn_copy, cmd_line, PGSIZE);
+  
+	/* Project2 S */
+	// extract actual filename
+	char *copy_file_name = palloc_get_page (0);
+	strlcpy (copy_file_name, cmd_line, strlen(cmd_line) + 1);
+	char *save_ptr;
+	char *file_name = strtok_r (copy_file_name, " ", &save_ptr);
+	/* Project2 E */
+	
+	/* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
-  return tid;
+  
+	/* Project2 S */
+	palloc_free_page (copy_file_name);
+	/* Project2 E */
+	
+	return tid;
 }
 
 /* A thread function that loads a user process and starts it
@@ -543,7 +556,7 @@ pass_argument (char *cmd_line, void **esp)
 	// free all the allocated pages	
 	palloc_free_page (addrs);
 
-	// hex_dump (0, temp_esp, 48, true);
+  // hex_dump (0, temp_esp, 48, true);
 	// return next temp_esp
 	*esp = temp_esp - 4;	
 }
