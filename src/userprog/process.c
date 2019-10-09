@@ -23,7 +23,8 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static char* get_file_title(const char* file_name);
+static void get_title(const char* file_name, char* file_title);
+static void pass_argument(const char* cmdline, void** esp_);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -34,6 +35,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+	char file_title[16];
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -43,11 +45,10 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* Project2 S */
-	char* file_title = get_file_title(file_name);	
+	get_title(file_name, file_title);	
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_title, PRI_DEFAULT, start_process, fn_copy);
-	palloc_free_page(file_title);
 	/* Project2 E */
   
 	if (tid == TID_ERROR)
@@ -69,7 +70,8 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  if((success = load (file_name, &if_.eip, &if_.esp)))
+		pass_argument(file_name, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -206,10 +208,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-/* Project2 S */
-static void* pass_argument(const char* cmdline);
-static bool setup_stack (void **esp, const char* cmdline);
-/* Project2 E */
+static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -228,6 +227,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+	char file_title[16];
   
 	/* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -237,11 +237,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 	/* Project2 S */
 	/* Get file title */
-	char* file_title = get_file_title(file_name);
+	get_title(file_name, file_title);
 
   /* Open executable file. */
   file = filesys_open (file_title);
-	palloc_free_page(file_title);
 	/* Project2 E */
   if (file == NULL) 
     {
@@ -322,9 +321,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-	/* Project2 S */
-  if (!setup_stack (esp, file_name))
-	/* Project2 E */
+  if (!setup_stack (esp))
     goto done;
 
   /* Start address. */
@@ -448,10 +445,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
-/* Project2 S */
 static bool
-setup_stack (void **esp, const char* cmdline) 
-/* Project2 E */
+setup_stack (void **esp) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -461,9 +456,7 @@ setup_stack (void **esp, const char* cmdline)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-				/* Project2 S */
-        *esp = pass_argument(cmdline);
-				/* Project2 E */
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
@@ -492,8 +485,8 @@ install_page (void *upage, void *kpage, bool writable)
 
 /* Project2 S */
 /* Parse arguments, then stack up in proper order */
-static void* 
-pass_argument(const char* cmdline)
+static void 
+pass_argument(const char* cmdline, void** esp_)
 {
 	char* cmd_copy = palloc_get_page(0);
 	char* saver = NULL;
@@ -533,18 +526,19 @@ pass_argument(const char* cmdline)
 	esp -= 8;
 	memcpy(esp, &argc, 4);
 
-	return esp - 4;
+	*esp_ = esp - 4;
 }
 
-/* Extract file title from whole command line 
-	 Warning! - must free title pointer after use of file title */
-static char* 
-get_file_title(const char* file_name)
+/* Extract file title from whole FILE_NAME */ 
+static void
+get_title(const char* file_name, char* file_title)
 {
-	char* file_title = palloc_get_page(0);
+	char* file_tmp = palloc_get_page(0);
 	char* saver = NULL;
-	strlcpy(file_title, file_name, PGSIZE);
-	return strtok_r(file_title, " ", &saver);
+	strlcpy(file_tmp, file_name, PGSIZE);
+	file_tmp = strtok_r(file_tmp, " ", &saver);
+	strlcpy(file_title, file_tmp, 16);
+	palloc_free_page(file_tmp);
 }
 /* Project2 E */
 
