@@ -21,6 +21,10 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+/* Project2 S */
+void pass_argument (char *cmd_line, void **esp);
+/* Project2 E */
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -62,10 +66,14 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+	/* Project2 S */
+  if (success)
+		pass_argument (file_name, &if_.esp);
+	/* Project2 E */
+	palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();
-
+    thread_exit ();	
+	
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -88,6 +96,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+	alarm_sleep (1500);
   return -1;
 }
 
@@ -206,7 +215,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (const char *cmd_line, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -214,6 +223,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+
+	/* Project2 S */
+	// extract actual filename
+	char *copy_file_name = palloc_get_page (0);
+	strlcpy (copy_file_name, cmd_line, strlen(cmd_line) + 1);
+	char *save_ptr;
+	char *file_name = strtok_r (copy_file_name, " ", &save_ptr);
+	/* Project2 E */
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -313,6 +330,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+	/* Project S */
+	palloc_free_page (copy_file_name);	
+	/* Project E */
   return success;
 }
 
@@ -437,7 +457,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
     }
@@ -463,3 +483,69 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+/* Project2 S */
+
+void
+pass_argument (char *cmd_line, void **esp)
+{
+	// allocate all arguements at the top of the user stack
+	void *temp_esp = PHYS_BASE;
+	char **addrs = palloc_get_page (0); // address list of element of argv
+	size_t argv_actual_len = 0;
+	int argc = 0;
+	char *token, *save_ptr;
+		
+  for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr))
+  {
+		// printf ("'%s'\n", token);
+		size_t token_actual_len = strlen (token) + 1;
+		// count the number of arguments
+		argc += 1;
+		// keep tracking the total length of all arguments
+		argv_actual_len += token_actual_len;
+		// update esp for next argument
+		temp_esp -=	token_actual_len;	
+		// allocate argument at the top of the user stack
+		strlcpy (temp_esp, token, token_actual_len);
+		// keep the address of element of argv
+		addrs[argc-1] = temp_esp;
+	}
+	// add '0' to addrs as the last element
+	addrs[argc] = 0;	
+
+	// word alignment
+	int needed_space = 4 - argv_actual_len % 4;	
+	temp_esp -= needed_space;
+
+	// save arvg's actual address in decreasing order
+  int index;
+	for (index = argc; index >= 0; index--)
+	{
+		// update esp for next argument address
+		temp_esp -= 4;
+		// allocate actual address at temp_esp
+		char **char_temp_esp = temp_esp;
+		*char_temp_esp = addrs[index];	
+	}
+
+	// save start address of argv
+	temp_esp -= 4;
+	void **void_temp_esp = temp_esp;
+	*void_temp_esp = temp_esp + 4;
+	
+	// save argc
+	temp_esp -= 4;
+	int *int_temp_esp = temp_esp;
+	*int_temp_esp = argc;
+
+	// free all the allocated pages	
+	palloc_free_page (addrs);
+
+	// hex_dump (0, temp_esp, 48, true);
+	// return next temp_esp
+	*esp = temp_esp - 4;	
+}
+
+/* Project2 E */
