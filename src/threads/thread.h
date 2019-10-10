@@ -100,6 +100,9 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+		/* Project2 S */
+		struct process* process;						/* Process structure */
+		/* Project2 E */
 #endif
 
     /* Owned by thread.c. */
@@ -146,5 +149,11 @@ int thread_get_load_avg (void);
 void alarm_sleep(int64_t dest);
 void alarm_wake(int64_t cur_tick);
 /* Projcet1 E */
+
+/* Project2 S */
+#ifdef USERPROG
+struct process* thread_process(void);
+#endif
+/* Project2 E */
 
 #endif /* threads/thread.h */

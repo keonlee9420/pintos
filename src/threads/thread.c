@@ -101,6 +101,7 @@ thread_init (void)
 	/* Project1 S */
 	lock_init(&sleep_lock);
 	list_init(&sleep_list);
+	/* Project1 E */
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -644,3 +645,12 @@ alarm_wake(int64_t cur_tick)
 	intr_set_level(old_level);
 }
 /* Project1 E */
+/* Project2 S */
+#ifdef USERPROG
+struct process* 
+thread_process(void)
+{
+	return thread_current()->process;
+}
+#endif
+/* Project2 E */

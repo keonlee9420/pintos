@@ -2,8 +2,29 @@
 #define USERPROG_PROCESS_H
 
 #include "threads/thread.h"
+#include "threads/synch.h"
 
-typedef tid_t pid_t;
+/* Project2 S */
+typedef int pid_t;
+
+struct process
+{
+	pid_t pid;											/* Process pid */
+	struct thread* parent;					/* Parent thread of process */
+
+	bool success;										/* Whether load succeed */
+	bool isexited;									/* Exit determinator */
+	int exitstat;										/* Exit status */
+
+	struct list filelist;						/* List of file descriptor */
+
+	struct semaphore semaphore;			/* Synch for load/wait syscall */
+
+	struct list_elem elem;					/* Proc_list element */
+};
+
+void process_init(void);
+/* Project2 E */
 
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);

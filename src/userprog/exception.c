@@ -4,6 +4,9 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+/* Project2 S */
+#include "userprog/syscall.h"
+/* Project2 E */
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -156,7 +159,8 @@ page_fault (struct intr_frame *f)
 		f->eip = (void*)f->eax;
 		f->eax = 0xffffffff;
 		return;
-	} 
+	}
+	syscall_exit(-1);
 
 	printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,

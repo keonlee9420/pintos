@@ -4,9 +4,13 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 /* Project2 S */
+#include <list.h>
+#include <string.h>
 #include "userprog/process.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "devices/shutdown.h"
+#include "devices/input.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 /* Project2 E */
@@ -29,6 +33,16 @@ static int sc_write(int fd, const void* buffer, unsigned size);
 static void sc_seek(int fd, unsigned position);
 static unsigned sc_tell(int fd);
 static void sc_close(int fd);
+
+/* File descriptor */
+struct file_descriptor
+{
+	int fd;
+	struct file* file;
+	struct list_elem elem;
+};
+
+static struct file* fd2file(int fd);
 /* Project2 E */
 
 void
@@ -102,6 +116,15 @@ get_user(const uint8_t* uaddr)
 	return result;
 }
 
+static bool 
+put_user(uint8_t* udst, uint8_t byte)
+{
+	int error_code;
+	asm("movl $1f, %0; movb %b2, %1; 1:" 
+			: "=&a" (error_code), "=m" (*udst) : "q" (byte));
+	return error_code != -1;
+}
+
 static int 
 read_user(void* uaddr)
 {
@@ -150,6 +173,8 @@ sc_halt(void)
 static void 
 sc_exit(int status)
 {
+	struct process* p = thread_process();
+	p->exitstat = status;
 	printf("%s: exit(%d)\n", thread_name(), status);
 	thread_exit();
 	NOT_REACHED();
@@ -185,45 +210,176 @@ sc_remove(const char* file)
 static int 
 sc_open(const char* file)
 {
+	struct file_descriptor* f;
+	struct file* file_opened;
+	struct list* filelist = &thread_process()->filelist;
+	int fd = 3;
+
 	validate_string(file);
-	return 0;
+
+	if((file_opened = filesys_open(file)) == NULL)
+		return -1;
+
+	if(!list_empty(filelist))
+		fd = list_entry(list_rbegin(filelist), 
+										struct file_descriptor, elem)->fd + 1;
+
+	f = malloc(sizeof(struct file_descriptor));
+	f->fd = fd;
+	f->file = file_opened;
+	list_push_back(filelist, &f->elem);
+
+	if(!strcmp(thread_name(), file))
+		file_deny_write(file_opened);
+
+	return fd;
 }
 
 static int 
-sc_filesize(int fd UNUSED)
+sc_filesize(int fd)
 {
-	return 0;
+	struct file* file = fd2file(fd);
+	if(file == NULL)
+		return 0;
+	return (int)file_length(file);
 }
 
 static int 
-sc_read(int fd UNUSED, void* buffer UNUSED, unsigned size UNUSED)
+sc_read(int fd, void* buffer, unsigned size)
 {
-	return 0;
+	unsigned i;
+
+	switch(fd)
+	{
+		case STDIN_FILENO:
+		{
+			uint8_t data;
+			for(i = 0; i < size; i++)
+			{
+				data = input_getc();
+				if(!is_user_vaddr(buffer) || !put_user(buffer++, data))
+					sc_exit(-1);
+			}
+			return size;
+		}
+		case STDOUT_FILENO:
+			return 0;
+		default:
+		{
+			struct file* file = fd2file(fd);
+			if(file == NULL)
+				return 0;
+
+			uint8_t* data = malloc(size);
+			unsigned readsize = file_read(file, data, size);
+			for(i = 0; i < readsize; i++)
+			{
+				if(!is_user_vaddr(buffer) || !put_user(buffer++, data[i]))
+				{
+					free(data);
+					sc_exit(-1);
+				}
+			}
+			free(data);
+			return readsize;
+		}
+	}
 }
 
 static int 
-sc_write(int fd UNUSED, const void* buffer, unsigned size)
+sc_write(int fd, const void* buffer, unsigned size)
 {
+	struct file* file;
 	validate_string(buffer);
-	putbuf(buffer, size);
-	return 0;
+	switch(fd)
+	{
+		case STDIN_FILENO:
+			return 0;
+		case STDOUT_FILENO:
+			putbuf(buffer, size);
+			return size;
+			
+		default:
+			if((file = fd2file(fd)) == NULL)
+				return 0;
+			return file_write(file, buffer, size);
+	}
 }
 
 static void 
-sc_seek(int fd UNUSED, unsigned position UNUSED)
+sc_seek(int fd, unsigned position)
 {
-	return;
+	struct file* file = fd2file(fd);
+	if(file == NULL)
+		return;
+	file_seek(file, position);
 }
 
 static unsigned 
-sc_tell(int fd UNUSED)
+sc_tell(int fd)
 {
-	return 0;
+	struct file* file = fd2file(fd);
+	if(file == NULL)
+		return 0;
+	return file_tell(file);
 }
 
 static void 
-sc_close(int fd UNUSED)
+sc_close(int fd)
 {
-	return;
+	struct list_elem* e;
+	struct file_descriptor* f = NULL;
+	struct list* filelist = &thread_process()->filelist;
+
+	for(e = list_begin(filelist); e != list_end(filelist); 
+			e = list_next(e))
+	{
+		f = list_entry(e, struct file_descriptor, elem);
+		if(f->fd == fd)
+			break;
+		f = NULL;
+	}
+
+	if(f == NULL)
+		return;
+
+	file_close(f->file);
+	list_remove(&f->elem);
+	free(f);
 }
 
+static struct file* 
+fd2file(int fd)
+{
+	struct list_elem* e;
+	struct list* filelist = &thread_process()->filelist;
+
+	for(e = list_begin(filelist); e != list_end(filelist); 
+			e = list_next(e))
+	{
+		struct file_descriptor* f = list_entry(e, struct file_descriptor, elem);
+		if(f->fd == fd)
+			return f->file;
+	}
+	return NULL;
+}
+
+void 
+syscall_collapse_fd(void)
+{
+	struct list* filelist = &thread_process()->filelist;
+
+	while(!list_empty(filelist))
+	{
+		struct file_descriptor* f = list_entry(list_pop_front(filelist), 
+													 								 struct file_descriptor, elem);
+		file_close(f->file);
+		free(f);
+	}
+}
+
+void 
+syscall_exit(int status)
+{
+	sc_exit(status);
+}
