@@ -193,6 +193,7 @@ process_exit (void)
 	proc = cur->process;
 	if(proc != NULL)
 	{
+		printf("%s: exit(%d)\n", thread_name(), proc->status);
 		/* Collapse fd resources */
 		fd_collapse();
 		/* Mark as exited */

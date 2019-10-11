@@ -159,7 +159,6 @@ page_fault (struct intr_frame *f)
 		return;
 	}
 	/* Page Fault by user: exit process */
-	printf("%s: exit(%d)\n", thread_name(), -1);
 	thread_exit();
 }
 

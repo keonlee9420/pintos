@@ -43,6 +43,8 @@ syscall_init (void)
 }
 
 /* Project2 S */
+/* Read system call number from stack, 
+	 then run each system call function with corresponding parameter in stack */
 static void
 syscall_handler (struct intr_frame *f) 
 {
@@ -98,7 +100,9 @@ syscall_handler (struct intr_frame *f)
 	}
 }
 
-/*  */
+/* Reads a byte at user virtual address UADDR.
+	 UADDR must be below PHYS_BASE.
+	 Returns the byte value if successful, -1 if a segfault occurred */
 static int 
 get_user(const uint8_t* uaddr)
 {
@@ -108,6 +112,9 @@ get_user(const uint8_t* uaddr)
 	return result;
 }
 
+/* Writes BYTE to user address UDST.
+	 UDST must be below PHYS_BASE. 
+	 Returns true if successful, false if a segfault occurred */
 static bool 
 put_user(uint8_t* udst, uint8_t byte)
 {
@@ -117,6 +124,9 @@ put_user(uint8_t* udst, uint8_t byte)
 	return error_code != -1;
 }
 
+/* Read 4 byte sequentially.
+	 Check whether each address is below PHYS_BASE.
+	 Use for reading system call argument, since they are all 4-byte data */
 static int 
 read_user(void* uaddr)
 {
@@ -136,6 +146,8 @@ read_user(void* uaddr)
 	return result;
 }
 
+/* Validate string address. 
+	 Try to read all the characters in string */
 static void 
 validate_string(const char* str)
 {
@@ -155,6 +167,7 @@ validate_string(const char* str)
 	}while(result);
 }
 
+/* Power off Pintos */
 static void 
 sc_halt(void)
 {
@@ -162,16 +175,17 @@ sc_halt(void)
 	NOT_REACHED();
 }
 
+/* Exit current process.
+	 Save exit status into process struct. */
 static void 
 sc_exit(int status)
 {
-	struct process* p = thread_process();
-	p->status = status;
-	printf("%s: exit(%d)\n", thread_name(), status);
+	thread_process()->status = status;
 	thread_exit();
 	NOT_REACHED();
 }
 
+/* Execute child process */
 static pid_t 
 sc_exec(const char* cmd_line)
 {
@@ -179,12 +193,14 @@ sc_exec(const char* cmd_line)
 	return process_execute(cmd_line);
 }
 
+/* Wait child process */
 static int 
 sc_wait(pid_t pid)
 {
 	return process_wait(pid);
 }
 
+/* Create new file named FILE */
 static bool 
 sc_create(const char* file, unsigned initial_size)
 {
@@ -192,6 +208,7 @@ sc_create(const char* file, unsigned initial_size)
 	return filesys_create(file, initial_size);
 }
 
+/* Remove FILE */
 static bool 
 sc_remove(const char* file)
 {
@@ -199,6 +216,8 @@ sc_remove(const char* file)
 	return filesys_remove(file);
 }
 
+/* Open FILE. 
+	 Allocate file descriptor number */
 static int 
 sc_open(const char* file)
 {
@@ -215,6 +234,7 @@ sc_open(const char* file)
 	return fd_open(file_opened);
 }
 
+/* Compute file size mapped by FD */
 static int 
 sc_filesize(int fd)
 {
@@ -224,6 +244,9 @@ sc_filesize(int fd)
 	return (int)file_length(file);
 }
 
+/* Read data from file of FD, then write into BUFFER
+	 FD == STDIN_FILENO: read keyboard input
+	 FD == STDOUT_FILENO: do nothing */
 static int 
 sc_read(int fd, void* buffer, unsigned size)
 {
@@ -266,6 +289,9 @@ sc_read(int fd, void* buffer, unsigned size)
 	}
 }
 
+/* Read data from BUFFER, then write data into file.
+	 FD == STDIN_FILENO: do nothing
+	 FD == STDOUT_FILENO: print data through console */
 static int 
 sc_write(int fd, const void* buffer, unsigned size)
 {
@@ -286,6 +312,7 @@ sc_write(int fd, const void* buffer, unsigned size)
 	}
 }
 
+/* Seek POSITION of file from FD */
 static void 
 sc_seek(int fd, unsigned position)
 {
@@ -295,6 +322,7 @@ sc_seek(int fd, unsigned position)
 	file_seek(file, position);
 }
 
+/* Tell current reading position of file from FD */
 static unsigned 
 sc_tell(int fd)
 {
@@ -304,6 +332,8 @@ sc_tell(int fd)
 	return file_tell(file);
 }
 
+/* Close file of FD. 
+	 Deallocate file descriptor mapping file and FD. */
 static void 
 sc_close(int fd)
 {
