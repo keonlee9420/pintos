@@ -12,9 +12,9 @@ struct process
 	pid_t pid;											/* Process pid */
 	struct thread* parent;					/* Parent thread of process */
 
-	bool success;										/* Whether load succeed */
+	bool success;										/* Load status */
 	bool isexited;									/* Exit determinator */
-	int exitstat;										/* Exit status */
+	int status;											/* Exit status */
 
 	struct list filelist;						/* List of file descriptor */
 

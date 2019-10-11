@@ -7,6 +7,7 @@
 #include <list.h>
 #include <string.h>
 #include "userprog/process.h"
+#include "userprog/filedescriptor.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "devices/shutdown.h"
@@ -33,16 +34,6 @@ static int sc_write(int fd, const void* buffer, unsigned size);
 static void sc_seek(int fd, unsigned position);
 static unsigned sc_tell(int fd);
 static void sc_close(int fd);
-
-/* File descriptor */
-struct file_descriptor
-{
-	int fd;
-	struct file* file;
-	struct list_elem elem;
-};
-
-static struct file* fd2file(int fd);
 /* Project2 E */
 
 void
@@ -107,6 +98,7 @@ syscall_handler (struct intr_frame *f)
 	}
 }
 
+/*  */
 static int 
 get_user(const uint8_t* uaddr)
 {
@@ -174,7 +166,7 @@ static void
 sc_exit(int status)
 {
 	struct process* p = thread_process();
-	p->exitstat = status;
+	p->status = status;
 	printf("%s: exit(%d)\n", thread_name(), status);
 	thread_exit();
 	NOT_REACHED();
@@ -210,35 +202,23 @@ sc_remove(const char* file)
 static int 
 sc_open(const char* file)
 {
-	struct file_descriptor* f;
 	struct file* file_opened;
-	struct list* filelist = &thread_process()->filelist;
-	int fd = 3;
 
 	validate_string(file);
 
 	if((file_opened = filesys_open(file)) == NULL)
 		return -1;
 
-	if(!list_empty(filelist))
-		fd = list_entry(list_rbegin(filelist), 
-										struct file_descriptor, elem)->fd + 1;
-
-	f = malloc(sizeof(struct file_descriptor));
-	f->fd = fd;
-	f->file = file_opened;
-	list_push_back(filelist, &f->elem);
-
 	if(!strcmp(thread_name(), file))
 		file_deny_write(file_opened);
 
-	return fd;
+	return fd_open(file_opened);
 }
 
 static int 
 sc_filesize(int fd)
 {
-	struct file* file = fd2file(fd);
+	struct file* file = fd_convert(fd);
 	if(file == NULL)
 		return 0;
 	return (int)file_length(file);
@@ -266,7 +246,7 @@ sc_read(int fd, void* buffer, unsigned size)
 			return 0;
 		default:
 		{
-			struct file* file = fd2file(fd);
+			struct file* file = fd_convert(fd);
 			if(file == NULL)
 				return 0;
 
@@ -300,7 +280,7 @@ sc_write(int fd, const void* buffer, unsigned size)
 			return size;
 			
 		default:
-			if((file = fd2file(fd)) == NULL)
+			if((file = fd_convert(fd)) == NULL)
 				return 0;
 			return file_write(file, buffer, size);
 	}
@@ -309,7 +289,7 @@ sc_write(int fd, const void* buffer, unsigned size)
 static void 
 sc_seek(int fd, unsigned position)
 {
-	struct file* file = fd2file(fd);
+	struct file* file = fd_convert(fd);
 	if(file == NULL)
 		return;
 	file_seek(file, position);
@@ -318,7 +298,7 @@ sc_seek(int fd, unsigned position)
 static unsigned 
 sc_tell(int fd)
 {
-	struct file* file = fd2file(fd);
+	struct file* file = fd_convert(fd);
 	if(file == NULL)
 		return 0;
 	return file_tell(file);
@@ -327,59 +307,8 @@ sc_tell(int fd)
 static void 
 sc_close(int fd)
 {
-	struct list_elem* e;
-	struct file_descriptor* f = NULL;
-	struct list* filelist = &thread_process()->filelist;
-
-	for(e = list_begin(filelist); e != list_end(filelist); 
-			e = list_next(e))
-	{
-		f = list_entry(e, struct file_descriptor, elem);
-		if(f->fd == fd)
-			break;
-		f = NULL;
-	}
-
-	if(f == NULL)
-		return;
-
-	file_close(f->file);
-	list_remove(&f->elem);
-	free(f);
+	struct file* file = fd_close(fd);
+	if(file != NULL)
+		file_close(file);
 }
 
-static struct file* 
-fd2file(int fd)
-{
-	struct list_elem* e;
-	struct list* filelist = &thread_process()->filelist;
-
-	for(e = list_begin(filelist); e != list_end(filelist); 
-			e = list_next(e))
-	{
-		struct file_descriptor* f = list_entry(e, struct file_descriptor, elem);
-		if(f->fd == fd)
-			return f->file;
-	}
-	return NULL;
-}
-
-void 
-syscall_collapse_fd(void)
-{
-	struct list* filelist = &thread_process()->filelist;
-
-	while(!list_empty(filelist))
-	{
-		struct file_descriptor* f = list_entry(list_pop_front(filelist), 
-													 								 struct file_descriptor, elem);
-		file_close(f->file);
-		free(f);
-	}
-}
-
-void 
-syscall_exit(int status)
-{
-	sc_exit(status);
-}

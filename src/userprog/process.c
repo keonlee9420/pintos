@@ -20,19 +20,20 @@
 /* Project2 S */
 #include "devices/timer.h"
 #include "threads/malloc.h"
-#include "userprog/syscall.h"
+#include "userprog/filedescriptor.h"
 /* Project2 E */
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 /* Project2 S */
-static void get_title(const char* file_name, char* file_title);
+static char* get_title(const char* file_name);
 static void pass_argument(const char* cmdline, void** esp_); 
 static struct process* process_find(pid_t pid);
 static void setup_process(bool success);
 static bool create_process(tid_t child_tid);
 
+/* List system of all processes */
 static struct list proc_list;
 static struct lock lock_proclist;
 
@@ -55,7 +56,7 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 	/* Project2 S */
-	char file_title[16];
+	char* file_title;
 	/* Project2 E */
 
   /* Make a copy of FILE_NAME.
@@ -66,10 +67,11 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* Project2 S */
-	get_title(file_name, file_title);	
+	file_title = get_title(file_name);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_title, PRI_DEFAULT, start_process, fn_copy);
+	free(file_title);
 	/* Return -1 if thread not created */
 	if (tid == TID_ERROR)
 	{
@@ -81,8 +83,8 @@ process_execute (const char *file_name)
 		 Return -1 when child load failed */
 	if(!create_process(tid))
 		return -1;
- 
 	/* Project2 E */
+
   return tid;
 }
 
@@ -100,13 +102,15 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  if((success = load (file_name, &if_.eip, &if_.esp)))
+  /* Project2 S */
+	if((success = load (file_name, &if_.eip, &if_.esp)))
 		pass_argument(file_name, &if_.esp);
 	
+  palloc_free_page (file_name);
 	setup_process(success);
+	/* Project2 E */
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
@@ -135,18 +139,26 @@ process_wait (tid_t child_tid)
 	struct process* p;
 	int status;
 
-	/* Return -1 if thread creation or load failed */
-	if(child_tid == -1 || 
+	/* Return -1 if 
+		 1. thread creation or load failed 
+		 2. process struct not exists (called wait more than twice)
+		 3. current process is not a parent of child_tid */
+	if(child_tid == TID_ERROR || 
 		 (p = process_find(child_tid)) == NULL || 
 		 p->parent != thread_current())
 		return -1;
 	
+	/* Wait until child wakes parent up */
 	while(!p->isexited)
 		sema_down(&p->semaphore);
 	
-	status = p->exitstat;
+	/* Free process resource */
+	status = p->status;
+	lock_acquire(&lock_proclist);
 	list_remove(&p->elem);
+	lock_release(&lock_proclist);
 	free(p);
+	
 	return status;
 }
 
@@ -156,18 +168,8 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
 	/* Project2 S */
-	struct process* proc = cur->process;
-	if(proc != NULL)
-	{
-		/* Collapse fd resources */
-		syscall_collapse_fd();
-		/* Mark as exited */
-		proc->isexited = true;
-		/* Signal to parent */
-		sema_up(&proc->semaphore);
-	}	
+	struct process* proc;
 	/* Project2 E */
 
   /* Destroy the current process's page directory and switch back
@@ -186,6 +188,19 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+	/* Project2 S */
+	proc = cur->process;
+	if(proc != NULL)
+	{
+		/* Collapse fd resources */
+		fd_collapse();
+		/* Mark as exited */
+		proc->isexited = true;
+		/* Signal to parent */
+		sema_up(&proc->semaphore);
+	}	
+	/* Project2 E */
 }
 
 /* Sets up the CPU for running user code in the current
@@ -286,7 +301,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
-	char file_title[16];
+	char* file_title;
   
 	/* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -296,10 +311,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 	/* Project2 S */
 	/* Get file title */
-	get_title(file_name, file_title);
+	file_title = get_title(file_name);
 
   /* Open executable file. */
   file = filesys_open (file_title);
+	free(file_title);
 	/* Project2 E */
   if (file == NULL) 
     {
@@ -545,61 +561,55 @@ install_page (void *upage, void *kpage, bool writable)
 /* Project2 S */
 /* Parse arguments, then stack up in proper order */
 static void 
-pass_argument(const char* cmdline, void** esp_)
+pass_argument(const char* cmdline, void** esp)
 {
-	char* cmd_copy = palloc_get_page(0);
 	char* saver = NULL;
-	void* esp = PHYS_BASE;
+	void* tmp_esp = PHYS_BASE;
 	char* cmd_tok;
 	int argc = 0;
 	void** argv = palloc_get_page(0);
-	
-	strlcpy(cmd_copy, cmdline, PGSIZE);
 
 	/* Stack up command line, divided by deliminator */
-	for(cmd_tok = strtok_r(cmd_copy, " ", &saver); cmd_tok;
+	for(cmd_tok = strtok_r((char*)cmdline, " ", &saver); cmd_tok;
 			cmd_tok = strtok_r(NULL, " ", &saver))
 	{
 		size_t tok_size = strlen(cmd_tok) + 1;
-		esp -= tok_size;
-		strlcpy(esp, cmd_tok, tok_size);
-		argv[argc++] = esp;
+		tmp_esp -= tok_size;
+		strlcpy(tmp_esp, cmd_tok, tok_size);
+		argv[argc++] = tmp_esp;
 	}
 	argv[argc] = NULL;
 
-	palloc_free_page(cmd_copy);
-
 	/* Align word to multiple of 4 */
-	esp -= 4 - (int)(PHYS_BASE - esp) % 4;
+	tmp_esp -= 4 - (int)(PHYS_BASE - tmp_esp) % 4;
 	
 	/* Stack up argv[0] ~ argv[argc] (== NULL) */
-	esp -= 4 * (argc + 1);
-	memcpy(esp, argv, 4 * (argc + 1));
+	tmp_esp -= 4 * (argc + 1);
+	memcpy(tmp_esp, argv, 4 * (argc + 1));
 	palloc_free_page(argv);
 
 	/* Stack up argv */
-	argv = esp - 4;
-	*argv = esp;
+	argv = tmp_esp - 4;
+	*argv = tmp_esp;
 
 	/* Stack up argc */
-	esp -= 8;
-	memcpy(esp, &argc, 4);
+	tmp_esp -= 8;
+	memcpy(tmp_esp, &argc, 4);
 
-	*esp_ = esp - 4;
+	*esp = tmp_esp - 4;
 }
 
 /* Extract file title from whole FILE_NAME */ 
-static void
-get_title(const char* file_name, char* file_title)
+static char*
+get_title(const char* file_name)
 {
-	char* file_tmp = palloc_get_page(0);
+	char* file_title = malloc(strlen(file_name) + 1);
 	char* saver = NULL;
 
-	strlcpy(file_tmp, file_name, PGSIZE);
-	file_tmp = strtok_r(file_tmp, " ", &saver);
+	strlcpy(file_title, file_name, strlen(file_name) + 1);
+	strtok_r(file_title, " ", &saver);
 
-	strlcpy(file_title, file_tmp, 16);
-	palloc_free_page(file_tmp);
+	return file_title;
 }
 
 /* Create child process, then wait for child load */
@@ -609,11 +619,11 @@ create_process(tid_t child_tid)
 	bool success;
 	
 	/* Create child process struct */
-	struct process* p = (struct process*)malloc(sizeof(struct process));
+	struct process* p = malloc(sizeof(struct process));
 	p->pid = child_tid;
 	p->parent = thread_current();
+	p->status = -1;
 	p->isexited = false;
-	p->exitstat = -1;
 	list_init(&p->filelist);
 	sema_init(&p->semaphore, 0);
 	
@@ -644,9 +654,11 @@ setup_process(bool success)
 	while((proc = process_find(thread_tid())) == NULL)
 		thread_yield();
 
+	/* record load condition */
 	proc->success = success;
 	thread_current()->process = proc;
 
+	/* Wake parent up */
 	sema_up(&proc->semaphore);
 }
 
@@ -655,14 +667,22 @@ static struct process*
 process_find(pid_t pid)
 {
 	struct list_elem* e;
-	struct process* p;
+	struct process* p = NULL;
+
+	/* Find process from back, 
+		 since system often needs access to recently added process */
+	lock_acquire(&lock_proclist);
 	for(e = list_rbegin(&proc_list); e != list_rend(&proc_list); 
 			e = list_prev(e))
 	{
 		p = list_entry(e, struct process, elem);
 		if(p->pid == pid)
+		{
+			lock_release(&lock_proclist);
 			return p;
+		}
 	}
+	lock_release(&lock_proclist);
 	return NULL;
 }
 /* Project2 E */
