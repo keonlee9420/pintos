@@ -17,12 +17,16 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+/* Project2 S */
+/* Project2 E */
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 /* Project2 S */
 void pass_argument (char *cmd_line, void **esp);
+struct process *process_create (const pid_t pid);
+void init_process (struct process *p, const pid_t pid);
 /* Project2 E */
 
 /* Starts a new thread running a user program loaded from
@@ -54,8 +58,21 @@ process_execute (const char *cmd_line)
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
-  
-	/* Project2 S */
+	
+	/* Project2 S */	 
+	// Create a new process and attach it to new thread
+	struct thread *t = get_thread_in_ready_list (tid);
+	struct process *p = process_create ((pid_t) tid);
+	if (p == PROCESS_ALLOCATE_ERROR)
+		return -1;
+	t->process = p;
+
+	// Down the sema to wait child's load and check the result status
+	sema_down (&p->sema);
+	if (p->status == PROCESS_ERROR)
+		return -1; 
+	
+	// free unused page
 	palloc_free_page (copy_file_name);
 	/* Project2 E */
 	
@@ -78,14 +95,28 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  /* If load failed, quit. */
 	/* Project2 S */
-  if (success)
+  struct process *process = thread_current ()->process;
+	// (busy) wait for parent to link between child's process and thread
+	while (process == NULL)
+	{
+		thread_yield ();
+	}
+
+	if (success)
 		pass_argument (file_name, &if_.esp);
-	/* Project2 E */
+		// notify parent that this child's load is success
+		process->status = PROCESS_LOADED;
+		sema_up (&process->sema);
+	
 	palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();	
+		// notify parent that this child's load is fail
+		process->status - PROCESS_ERROR;
+    sema_up (&process->sema);
+  	/* If load failed, quit. */
+		thread_exit ();		
+	/* Project2 E */
 	
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -107,7 +138,7 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
 	alarm_sleep (1500);
   return -1;
@@ -559,6 +590,38 @@ pass_argument (char *cmd_line, void **esp)
   // hex_dump (0, temp_esp, 48, true);
 	// return next temp_esp
 	*esp = temp_esp - 4;	
+}
+
+struct process *
+process_create (const pid_t pid)
+{
+	struct process *p;
+	ASSERT (pid != -1);
+	
+	// Allocate process
+	p = palloc_get_page (PAL_ZERO);
+	if (p == NULL)
+		return PROCESS_ALLOCATE_ERROR;
+	
+	// Initialize process
+	init_process (p, pid);
+	
+	return p;
+}
+
+void init_process (struct process *p, const pid_t pid)
+{
+	ASSERT (p != NULL);
+	ASSERT (pid != -1);
+
+	p->pid = pid;
+	p->status = PROCESS_CREATED;
+
+	// initialize sema
+	sema_init (&p->sema, 0);
+	
+	// initialize children list
+	list_init (&p->children);	
 }
 
 /* Project2 E */

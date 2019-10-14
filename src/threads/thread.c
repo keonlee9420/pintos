@@ -472,6 +472,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+	/* Project2 S */
+	t->process = NULL;
+	/* Project2 E */
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -644,3 +647,19 @@ alarm_wake(int64_t cur_tick)
 	intr_set_level(old_level);
 }
 /* Project1 E */
+
+/* Project2 E */
+struct thread *
+get_thread_in_ready_list (tid_t tid)
+{	
+	struct list_elem *e;
+ 
+	for (e = list_begin (&ready_list); e != list_end (&ready_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, elem);
+      if (t->tid == tid)
+				return t;
+    }
+}
+/* Project2 E */

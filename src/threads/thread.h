@@ -100,10 +100,15 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-#endif
 
-    /* Owned by thread.c. */
+		/* Project2 S */
+		struct process *process;  // Allocated process to this thread
+		/* Project2 E */
+#endif
+    
+		/* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+		
   };
 
 /* If false (default), use round-robin scheduler.
@@ -146,5 +151,9 @@ int thread_get_load_avg (void);
 void alarm_sleep(int64_t dest);
 void alarm_wake(int64_t cur_tick);
 /* Projcet1 E */
+
+/* Project2 S */
+struct thread *get_thread_in_ready_list (tid_t tid);
+/* Project2 E */
 
 #endif /* threads/thread.h */
