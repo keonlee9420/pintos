@@ -6,24 +6,37 @@
 #include "devices/shutdown.h"
 /* Project2 S */
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "lib/user/syscall.h"
 #include "userprog/process.h"
+#include "filesys/filesys.h"
 /* Project2 E */
 
 static void syscall_handler (struct intr_frame *);
 /* Project2 S */
 static int get_user (const uint8_t *uaddr);
 static int get_user_page (void *uaddr);
-static void valid_user_string (char *string);
+static void valid_user_string (const char *string);
 static bool put_user (uint8_t *udst, uint8_t byte);
 static void sys_exit (int status);
-static int sys_exec (char *cmd_line);
+static int sys_exec (const char *cmd_line);
 static int sys_wait (pid_t pid);
+bool sys_create (const char *file, unsigned initial_size);
+bool sys_remove (const char *file);
+int sys_open (const char *file);
+/* Project2 E */
+
+/* Project2 S */
+struct lock filesys_lock;
 /* Project2 E */
 
 void
 syscall_init (void) 
 {
+	/* Project2 S */
+	// init the lock for filesys 
+  lock_init (&filesys_lock);
+  /* Project2 E */
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -50,7 +63,7 @@ syscall_handler (struct intr_frame *f)
 			}
 		case SYS_EXEC:
 			{
-				char *cmd_line = (char *) get_user_page (esp + 1);
+				const char *cmd_line = (const char *)get_user_page (esp + 1);
 				pid_t pid = sys_exec (cmd_line);
 				// printf ("PID: %d is equal to CURRENT THREAD's PROCESS pid: %d\n"
 				//														, pid, thread_current ()->process->pid);
@@ -66,9 +79,35 @@ syscall_handler (struct intr_frame *f)
 				f->eax = status;
 				break;
 			}	
+		case SYS_CREATE:
+			{
+				const char *file = (char *)get_user_page (esp + 1);
+				unsigned initial_size = (unsigned)get_user_page (esp + 2);
+				bool status = sys_create (file, initial_size);
+				// save return status at eax
+				f->eax = status;
+				break;
+			}
+		case SYS_REMOVE:
+			{
+				const char *file = (char *)get_user_page (esp + 1);
+				bool status = sys_remove (file);
+				// save return status at eax
+				f->eax = status;
+				break;
+			}
+		case SYS_OPEN:
+			{
+				// int sys_open (const char *file)
+				const char *file = (char *)get_user_page (esp + 1);
+				int status = sys_open (file);
+				// save return status at eax
+				f->eax = status;
+				break;
+			}
 		case SYS_WRITE:
 			{
-				void *buffer = (void *) get_user_page ((void **)(esp + 2));
+				void *buffer = (void *)get_user_page ((void **)(esp + 2));
 				printf ("%s", (char *)buffer);
 				break;
 			}
@@ -110,7 +149,7 @@ get_user_page (void *uaddr)
 }
 
 static void
-valid_user_string (char *string)
+valid_user_string (const char *string)
 {
 	int i = 0;
 	while (1)
@@ -140,7 +179,9 @@ put_user (uint8_t *udst, uint8_t byte)
 static void 
 sys_exit (int status)
 {
+	// print msg for exit status
 	printf ("%s: exit(%d)\n", thread_name (), status);
+
 	// save exit status at exit_status of process
 	struct process *p = thread_current ()->process;
 	p->exit_status = status;
@@ -149,10 +190,10 @@ sys_exit (int status)
 }
 
 static int
-sys_exec (char *cmd_line)
+sys_exec (const char *cmd_line)
 {
-	// check whether cmd_line is valid
 	valid_user_string (cmd_line);
+
 	return process_execute (cmd_line);
 }
 
@@ -160,6 +201,44 @@ static int
 sys_wait (pid_t pid)
 {
 	return process_wait (pid);
+}
+
+bool 
+sys_create (const char *file, unsigned initial_size)
+{
+	valid_user_string (file);
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+	bool status = filesys_create (file, (off_t)initial_size);
+	lock_release (&filesys_lock);
+	return status; 
+}
+
+bool 
+sys_remove (const char *file)
+{
+	valid_user_string (file);
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+	bool status = filesys_remove (file);
+	lock_release (&filesys_lock);
+	return status;
+}
+
+int 
+sys_open (const char *file)
+{
+	bool status;
+
+	valid_user_string (file);
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+
+	lock_release (&filesys_lock);
+	return status;
 }
 
 /* Project2 E */
