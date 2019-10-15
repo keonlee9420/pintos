@@ -25,8 +25,9 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 /* Project2 S */
 void pass_argument (char *cmd_line, void **esp);
-struct process *process_create (const pid_t pid);
-void init_process (struct process *p, const pid_t pid);
+struct process *process_create (struct thread *t);
+void init_process (struct process *p, struct thread *t);
+struct process *get_child (pid_t pid, struct list *children);
 /* Project2 E */
 
 /* Starts a new thread running a user program loaded from
@@ -60,22 +61,31 @@ process_execute (const char *cmd_line)
     palloc_free_page (fn_copy); 
 	
 	/* Project2 S */	 
-	// Create a new process and attach it to new thread
-	struct thread *t = get_thread_in_ready_list (tid);
-	struct process *p = process_create ((pid_t) tid);
-	if (p == PROCESS_ALLOCATE_ERROR)
-		return -1;
-	t->process = p;
+  // If current thread is main (tid:0), then attach process to it first before it's child
+  if (thread_current ()->tid == 1)
+  { 
+    // Create a new process and attach it to current main thread
+    struct thread *t_p = thread_current ();
+    struct process *p_p = process_create (t_p);
+    if (p_p == PROCESS_ALLOCATE_ERROR)
+      return -1;
+    // Parent already loaded this child so change the process status as PROCESS_LOADED
+    p_p->status = PROCESS_LOADED;
+  }
+  // Create a new process and attach it to new thread (child process)
+  struct thread *t = get_thread_in_ready_list (tid);
+  struct process *p = process_create (t);
+  if (p == PROCESS_ALLOCATE_ERROR)
+    return -1;
 
 	// Down the sema to wait child's load and check the result status
 	sema_down (&p->sema);
 	if (p->status == PROCESS_ERROR)
 		return -1; 
-	
+
 	// free unused page
 	palloc_free_page (copy_file_name);
 	/* Project2 E */
-	
 	return tid;
 }
 
@@ -94,28 +104,32 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-
+  
 	/* Project2 S */
   struct process *process = thread_current ()->process;
 	// (busy) wait for parent to link between child's process and thread
 	while (process == NULL)
 	{
 		thread_yield ();
+    process = thread_current ()->process;
 	}
 
 	if (success)
+	{
 		pass_argument (file_name, &if_.esp);
 		// notify parent that this child's load is success
 		process->status = PROCESS_LOADED;
 		sema_up (&process->sema);
-	
+	}
 	palloc_free_page (file_name);
   if (!success) 
+	{
 		// notify parent that this child's load is fail
-		process->status - PROCESS_ERROR;
+		process->status = PROCESS_ERROR;
     sema_up (&process->sema);
   	/* If load failed, quit. */
 		thread_exit ();		
+	}
 	/* Project2 E */
 	
   /* Start the user process by simulating a return from an
@@ -140,8 +154,27 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
-	alarm_sleep (1500);
-  return -1;
+  /* Process2 S */
+	pid_t pid = (pid_t)child_tid;
+  int status = -1;
+
+	// get data of child process whose PID is pid
+  struct list *children = &thread_current ()->process->children;
+  struct process *child = get_child (pid, children);
+
+  // wait for the child
+  if (child && child->status == PROCESS_LOADED)
+  {
+    sema_down (&child->sema);
+    status = child->exit_status;
+    // remove child at children list of parent process
+    list_remove (&child->elem);
+  } 	
+
+  // if no child matched to pid, then return -1
+	return status;
+
+  /* Process2 E */
 }
 
 /* Free the current process's resources. */
@@ -166,6 +199,11 @@ process_exit (void)
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+      /* Project2 S */
+      // notify parent about child's success
+      struct process *child = thread_current ()->process;
+      sema_up (&child->sema);
+      /* Project2 E */
     }
 }
 
@@ -593,10 +631,9 @@ pass_argument (char *cmd_line, void **esp)
 }
 
 struct process *
-process_create (const pid_t pid)
+process_create (struct thread *t)
 {
 	struct process *p;
-	ASSERT (pid != -1);
 	
 	// Allocate process
 	p = palloc_get_page (PAL_ZERO);
@@ -604,13 +641,17 @@ process_create (const pid_t pid)
 		return PROCESS_ALLOCATE_ERROR;
 	
 	// Initialize process
-	init_process (p, pid);
-	
+	init_process (p, t);
+
+  // link this process to its owner thread
+  t->process = p;
+  
 	return p;
 }
 
-void init_process (struct process *p, const pid_t pid)
+void init_process (struct process *p, struct thread *t)
 {
+  pid_t pid = t->tid;
 	ASSERT (p != NULL);
 	ASSERT (pid != -1);
 
@@ -622,6 +663,29 @@ void init_process (struct process *p, const pid_t pid)
 	
 	// initialize children list
 	list_init (&p->children);	
+
+  // add current process to children list of parent only when the t is not main thread
+  if (t->tid != 1)
+  {
+    struct list *children = &thread_current ()->process->children;
+    list_push_back (children, &p->elem);
+  }
+}
+
+struct process *
+get_child (pid_t pid, struct list *children)
+{
+	struct list_elem *e;
+  struct process *p = NULL;
+ 
+  for (e = list_begin (children); e != list_end (children);
+       e = list_next (e))
+    {
+      p = list_entry (e, struct process, elem);
+      if (p->pid == pid)
+        return p;
+    }
+	return p;
 }
 
 /* Project2 E */

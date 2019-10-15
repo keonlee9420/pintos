@@ -648,18 +648,20 @@ alarm_wake(int64_t cur_tick)
 }
 /* Project1 E */
 
-/* Project2 E */
+/* Project2 S */
 struct thread *
 get_thread_in_ready_list (tid_t tid)
 {	
 	struct list_elem *e;
+  struct thread *t = NULL;
  
 	for (e = list_begin (&ready_list); e != list_end (&ready_list);
        e = list_next (e))
     {
-      struct thread *t = list_entry (e, struct thread, elem);
+      t = list_entry (e, struct thread, elem);
       if (t->tid == tid)
 				return t;
     }
+  return t;
 }
 /* Project2 E */

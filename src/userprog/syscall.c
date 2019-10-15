@@ -141,6 +141,10 @@ static void
 sys_exit (int status)
 {
 	printf ("%s: exit(%d)\n", thread_name (), status);
+	// save exit status at exit_status of process
+	struct process *p = thread_current ()->process;
+	p->exit_status = status;
+	p->status = status ? PROCESS_SUCCESS : PROCESS_ERROR;
 	thread_exit ();
 }
 

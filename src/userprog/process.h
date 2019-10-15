@@ -20,7 +20,8 @@ enum process_status
 struct process
 	{
 		pid_t pid;
-		enum process_status status;
+		enum process_status status; //process status based on its phase
+		int exit_status; //exit status of exit call from child process
 		struct list_elem elem; //used for children list of parent 
 																				// of this process if it exists.			
 		struct list children; //list of children processes 
