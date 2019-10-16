@@ -9,6 +9,8 @@
 /* Project2 E */
 
 /* Project2 S */
+#define PROCESS_ALLOCATE_ERROR (NULL) // Error value for allocation of process
+
 enum process_status
 	{
 		PROCESS_CREATED,
@@ -16,17 +18,16 @@ enum process_status
 		PROCESS_SUCCESS,
 		PROCESS_ERROR
 	};
-#define PROCESS_ALLOCATE_ERROR (NULL) // Error value for allocation of process
+
 struct process
 	{
 		pid_t pid;
-		enum process_status status; //process status based on its phase
-		int exit_status; //exit status of exit call from child process
-		struct list_elem elem; //used for children list of parent 
-																				// of this process if it exists.			
-		struct list children; //list of children processes 
-																				// of this process if they exist.
-		struct semaphore sema; //sema for waiting child's load or child's exit
+		enum process_status status; 	// Process status based on its phase
+		int exit_status; 							// Exit status of exit call from process
+		struct list_elem elem; 				// Element used for children list of parent of this process if it exists			
+		struct list children; 				// List of children processes of this process if they exist
+		struct list fd_list;					// List of fd_data of relevant files owned by this process
+		struct semaphore sema; 				// Sema for waiting child's load or child's exit
 	};
 /* Project2 E */
 

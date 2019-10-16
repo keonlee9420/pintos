@@ -664,6 +664,9 @@ void init_process (struct process *p, struct thread *t)
 	// initialize children list
 	list_init (&p->children);	
 
+  // initialize fd_list list
+  list_init (&p->fd_list);
+
   // add current process to children list of parent only when the t is not main thread
   if (t->tid != 1)
   {

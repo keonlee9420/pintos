@@ -5,11 +5,15 @@
 #include "threads/thread.h"
 #include "devices/shutdown.h"
 /* Project2 S */
+#include "devices/input.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 #include "lib/user/syscall.h"
-#include "userprog/process.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "userprog/process.h"
+#include "userprog/fd.h"
 /* Project2 E */
 
 static void syscall_handler (struct intr_frame *);
@@ -18,12 +22,19 @@ static int get_user (const uint8_t *uaddr);
 static int get_user_page (void *uaddr);
 static void valid_user_string (const char *string);
 static bool put_user (uint8_t *udst, uint8_t byte);
+static void sys_halt (void);
 static void sys_exit (int status);
 static int sys_exec (const char *cmd_line);
 static int sys_wait (pid_t pid);
-bool sys_create (const char *file, unsigned initial_size);
-bool sys_remove (const char *file);
-int sys_open (const char *file);
+static bool sys_create (const char *file, unsigned initial_size);
+static bool sys_remove (const char *file);
+static int sys_open (const char *filename);
+static int sys_filesize (int fd);
+static int sys_read (int fd, void *buffer, unsigned size);
+static int sys_write (int fd, const void *buffer, unsigned size);
+static void sys_seek (int fd, unsigned position);
+static unsigned sys_tell (int fd);
+static void sys_close (int fd);
 /* Project2 E */
 
 /* Project2 S */
@@ -52,7 +63,7 @@ syscall_handler (struct intr_frame *f)
 	{
 		case SYS_HALT:
 			{
-				shutdown_power_off ();
+				sys_halt ();
 				break;
 			}
 		case SYS_EXIT:
@@ -65,9 +76,6 @@ syscall_handler (struct intr_frame *f)
 			{
 				const char *cmd_line = (const char *)get_user_page (esp + 1);
 				pid_t pid = sys_exec (cmd_line);
-				// printf ("PID: %d is equal to CURRENT THREAD's PROCESS pid: %d\n"
-				//														, pid, thread_current ()->process->pid);
-				// save return value at eax
 				f->eax = pid;
 				break;
 			}	
@@ -75,7 +83,6 @@ syscall_handler (struct intr_frame *f)
 			{
 				pid_t pid = get_user_page (esp + 1);
 				int status = sys_wait (pid);
-				// save return status at eax				
 				f->eax = status;
 				break;
 			}	
@@ -84,7 +91,6 @@ syscall_handler (struct intr_frame *f)
 				const char *file = (char *)get_user_page (esp + 1);
 				unsigned initial_size = (unsigned)get_user_page (esp + 2);
 				bool status = sys_create (file, initial_size);
-				// save return status at eax
 				f->eax = status;
 				break;
 			}
@@ -92,23 +98,59 @@ syscall_handler (struct intr_frame *f)
 			{
 				const char *file = (char *)get_user_page (esp + 1);
 				bool status = sys_remove (file);
-				// save return status at eax
 				f->eax = status;
 				break;
 			}
 		case SYS_OPEN:
 			{
-				// int sys_open (const char *file)
-				const char *file = (char *)get_user_page (esp + 1);
-				int status = sys_open (file);
-				// save return status at eax
-				f->eax = status;
+				const char *filename = (char *)get_user_page (esp + 1);
+				int fd = sys_open (filename);
+				f->eax = fd;
+				break;
+			}
+		case SYS_FILESIZE:
+			{
+				int fd = get_user_page (esp + 1);
+				int filesize = sys_filesize (fd);
+				f->eax = filesize;
+				break;
+			}
+		case SYS_READ:
+			{
+				int fd = get_user_page (esp + 1);
+				void *buffer = (void *)get_user_page (esp + 2);
+				unsigned size = (unsigned)get_user_page (esp + 3);
+				int read_length = sys_read (fd, buffer, size);
+				f->eax = read_length;
 				break;
 			}
 		case SYS_WRITE:
 			{
-				void *buffer = (void *)get_user_page ((void **)(esp + 2));
-				printf ("%s", (char *)buffer);
+				int fd = get_user_page (esp + 1);
+				const void *buffer = (const void *)get_user_page (esp + 2);
+				unsigned size = (unsigned)get_user_page (esp + 3);
+				int write_length = sys_write (fd, buffer, size);
+				f->eax = write_length;
+				break;
+			}
+		case SYS_SEEK:
+			{
+				int fd = get_user_page (esp + 1);
+				unsigned position = (unsigned)get_user_page (esp + 2);
+				sys_seek (fd, position);
+				break;
+			}
+		case SYS_TELL:
+			{
+				int fd = get_user_page (esp + 1);
+				unsigned next_position = sys_tell (fd);
+				f->eax = next_position;
+				break;
+			}
+		case SYS_CLOSE:
+			{
+				int fd = get_user_page (esp + 1);
+				sys_close (fd);
 				break;
 			}
 		default:
@@ -175,15 +217,22 @@ put_user (uint8_t *udst, uint8_t byte)
 	return error_code != -1;
 }
 
+static void
+sys_halt (void)
+{
+	shutdown_power_off ();
+}
 
 static void 
 sys_exit (int status)
 {
+	struct process *p;
+
 	// print msg for exit status
 	printf ("%s: exit(%d)\n", thread_name (), status);
 
 	// save exit status at exit_status of process
-	struct process *p = thread_current ()->process;
+	p = thread_current ()->process;
 	p->exit_status = status;
 	p->status = status ? PROCESS_SUCCESS : PROCESS_ERROR;
 	thread_exit ();
@@ -203,7 +252,7 @@ sys_wait (pid_t pid)
 	return process_wait (pid);
 }
 
-bool 
+static bool 
 sys_create (const char *file, unsigned initial_size)
 {
 	valid_user_string (file);
@@ -215,7 +264,7 @@ sys_create (const char *file, unsigned initial_size)
 	return status; 
 }
 
-bool 
+static bool 
 sys_remove (const char *file)
 {
 	valid_user_string (file);
@@ -227,18 +276,127 @@ sys_remove (const char *file)
 	return status;
 }
 
-int 
-sys_open (const char *file)
+static int 
+sys_open (const char *filename)
 {
-	bool status;
+	int fd;
+	struct file *file;
 
-	valid_user_string (file);
+	valid_user_string (filename);
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+	file = filesys_open (filename);
+	fd = file ? fd_alloc (file) : -1;
+	lock_release (&filesys_lock);
+
+	return fd;
+}
+
+static int 
+sys_filesize (int fd)
+{
+	struct file *file = get_file (fd);
+	if (file == NULL)
+		return 0;
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+	int filesize = (int)file_length (file);
+	lock_release (&filesys_lock);
+	return filesize;
+}
+
+static bool
+put_on_valid_buffer (void *buffer, uint8_t byte)
+{
+	return is_user_vaddr (buffer) && put_user (buffer, byte);
+}
+
+static int
+sys_read (int fd, void *buffer, unsigned size)
+{
+	struct file *file;
+	unsigned read_length = 0;
+
+	// return if fd = STDOUT_FILENO 1
+	if (fd == STDOUT_FILENO)
+		return 0;
 
 	// filesys in critical section
 	lock_acquire (&filesys_lock);
 
+	// fd = STDIN_FILENO 0 or elses
+	if (fd == STDIN_FILENO)
+		{
+			uint8_t byte;
+			// validation checking
+			for (unsigned i = 0; i < size; i++)
+				{
+					// get i'th byte from key
+					byte = input_getc ();
+					// validate buffer and put byte on it
+					bool success = put_on_valid_buffer (buffer + i, byte);
+					// if fail, then releas filesys_lock and call sys_exit with status -1
+					if (!success)
+						{
+							lock_release (&filesys_lock);
+							sys_exit (-1);
+						}
+				}
+			read_length = size;
+		}
+	else
+		{
+			file = get_file (fd);
+			// if there is no such file with fd
+			if (file == NULL)
+				{
+					lock_release (&filesys_lock);
+					return 0;
+				}
+
+			// validation checking
+			uint8_t *byte = malloc (size);
+			// read file to byte first
+			read_length = file_read (file, byte, size);
+			// and then do validation checking
+			for (unsigned i = 0; i < read_length; i++)
+				{
+					// validate buffer and put byte on it
+					bool success = put_on_valid_buffer (buffer + i, byte[i]);
+					// if fail, then releas filesys_lock and call sys_exit with status -1
+					if (!success)
+						{
+							free (byte);
+							lock_release (&filesys_lock);
+							sys_exit (-1);
+						}
+				}
+			free (byte);
+		}
+	
 	lock_release (&filesys_lock);
-	return status;
+
+	return (int)read_length;
 }
+
+static int
+sys_write (int fd, const void *buffer, unsigned size)
+{
+	printf ("%s", (char *)buffer);
+}
+
+static void
+sys_seek (int fd, unsigned position)
+{}
+
+static unsigned
+sys_tell (int fd)
+{}
+
+static void
+sys_close (int fd)
+{}
 
 /* Project2 E */
