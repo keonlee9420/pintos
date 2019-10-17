@@ -13,6 +13,7 @@ struct fd_data
 };
 
 int fd_alloc (struct file *file);
-struct file *get_file (int fd);
+struct file *fd_get_file (int fd);
+struct file *fd_pop_file (int fd);
 
 #endif /* userprog/fd.h */

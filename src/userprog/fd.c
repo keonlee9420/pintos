@@ -36,11 +36,11 @@ fd_alloc (struct file *file)
 
 // Return file which has fd from fd_list
 struct file *
-get_file (int fd)
+fd_get_file (int fd)
 {
   struct process *p = thread_current ()->process;
   struct list *fd_list = &p->fd_list;
-  struct fd_data *fd_data = NULL;
+  struct fd_data *fd_data;
   struct list_elem *e;
  
   for (e = list_begin (fd_list); e != list_end (fd_list);
@@ -52,4 +52,28 @@ get_file (int fd)
     }
 
 	return NULL;
+}
+
+struct file *
+fd_pop_file (int fd)
+{
+  struct process *p = thread_current ()->process;
+  struct list *fd_list = &p->fd_list;
+  struct fd_data *fd_data;
+  struct file *file;
+  struct list_elem *e;
+
+  for (e = list_begin (fd_list); e != list_end (fd_list);
+       e = list_next (e))
+    {
+      fd_data = list_entry (e, struct fd_data, elem);
+      if (fd_data->fd == fd)
+        {
+          file = fd_data->file;
+          list_remove (e);
+          return file;
+        }
+    }
+  
+  return NULL;
 }

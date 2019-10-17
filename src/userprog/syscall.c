@@ -228,6 +228,8 @@ static void
 sys_exit (int status)
 {
 	struct process *p;
+  struct fd_data *fd_data;
+  struct list_elem *e;
 
 	// print msg for exit status
 	printf ("%s: exit(%d)\n", thread_name (), status);
@@ -236,6 +238,15 @@ sys_exit (int status)
 	p = thread_current ()->process;
 	p->exit_status = status;
 	p->status = status ? PROCESS_SUCCESS : PROCESS_ERROR;
+
+	// close all open file if exist
+	while (!list_empty (&p->fd_list))
+	{
+		e = list_pop_front (&p->fd_list);
+		fd_data = list_entry (e, struct fd_data, elem);
+		sys_close (fd_data->fd);
+	}
+
 	thread_exit ();
 }
 
@@ -297,7 +308,7 @@ sys_open (const char *filename)
 static int 
 sys_filesize (int fd)
 {
-	struct file *file = get_file (fd);
+	struct file *file = fd_get_file (fd);
 	if (file == NULL)
 		return 0;
 
@@ -350,7 +361,7 @@ sys_read (int fd, void *buffer, unsigned size)
 	else
 		{
 			// if there is no such file with fd
-			if ((file = get_file (fd)) == NULL)
+			if ((file = fd_get_file (fd)) == NULL)
 				{
 					lock_release (&filesys_lock);
 					return 0;
@@ -406,7 +417,7 @@ sys_write (int fd, const void *buffer, unsigned size)
 	else
 		{
 			// if there is no such file with fd
-			if ((file = get_file (fd)) == NULL)
+			if ((file = fd_get_file (fd)) == NULL)
 				{
 					lock_release (&filesys_lock);
 					return 0;
@@ -416,19 +427,45 @@ sys_write (int fd, const void *buffer, unsigned size)
 
 	lock_release (&filesys_lock);
 
-	return write_length;
+	return (int)write_length;
 }
 
 static void
 sys_seek (int fd, unsigned position)
-{}
+{
+	struct file *file = fd_get_file (fd);
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+	file_seek (file, (off_t)position);
+	lock_release (&filesys_lock);
+}
 
 static unsigned
 sys_tell (int fd)
-{}
+{
+	struct file *file = fd_get_file (fd);
+	unsigned position;
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+	position = (unsigned)file_tell (file);
+	lock_release (&filesys_lock);
+	return position;
+}
 
 static void
 sys_close (int fd)
-{}
+{
+	struct file *file;
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+	if ((file = fd_pop_file (fd)) != NULL)
+		{
+			file_close (file);
+		}
+	lock_release (&filesys_lock);
+}
 
 /* Project2 E */
