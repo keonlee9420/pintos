@@ -9,6 +9,7 @@
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "threads/malloc.h"
+#include "lib/string.h"
 #include "lib/user/syscall.h"
 #include "lib/kernel/console.h"
 #include "filesys/filesys.h"
@@ -24,7 +25,6 @@ static int get_user_page (void *uaddr);
 static void valid_user_string (const char *string);
 static bool put_user (uint8_t *udst, uint8_t byte);
 static void sys_halt (void);
-static void sys_exit (int status);
 static int sys_exec (const char *cmd_line);
 static int sys_wait (pid_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
@@ -224,7 +224,7 @@ sys_halt (void)
 	shutdown_power_off ();
 }
 
-static void 
+void 
 sys_exit (int status)
 {
 	struct process *p;
@@ -254,7 +254,6 @@ static int
 sys_exec (const char *cmd_line)
 {
 	valid_user_string (cmd_line);
-
 	return process_execute (cmd_line);
 }
 
@@ -300,6 +299,11 @@ sys_open (const char *filename)
 	lock_acquire (&filesys_lock);
 	file = filesys_open (filename);
 	fd = file ? fd_alloc (file) : -1;
+	
+	// denying writes to executables
+  if(strcmp(thread_current ()->name, filename) == 0)
+    file_deny_write(file);
+
 	lock_release (&filesys_lock);
 
 	return fd;
