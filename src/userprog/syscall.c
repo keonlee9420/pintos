@@ -10,6 +10,7 @@
 #include "threads/synch.h"
 #include "threads/malloc.h"
 #include "lib/user/syscall.h"
+#include "lib/kernel/console.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "userprog/process.h"
@@ -348,9 +349,8 @@ sys_read (int fd, void *buffer, unsigned size)
 		}
 	else
 		{
-			file = get_file (fd);
 			// if there is no such file with fd
-			if (file == NULL)
+			if ((file = get_file (fd)) == NULL)
 				{
 					lock_release (&filesys_lock);
 					return 0;
@@ -365,7 +365,7 @@ sys_read (int fd, void *buffer, unsigned size)
 				{
 					// validate buffer and put byte on it
 					bool success = put_on_valid_buffer (buffer + i, byte[i]);
-					// if fail, then releas filesys_lock and call sys_exit with status -1
+					// if fail, then releas resources and call sys_exit with status -1
 					if (!success)
 						{
 							free (byte);
@@ -384,7 +384,39 @@ sys_read (int fd, void *buffer, unsigned size)
 static int
 sys_write (int fd, const void *buffer, unsigned size)
 {
-	printf ("%s", (char *)buffer);
+	struct file *file;
+	unsigned write_length = 0;
+
+	// return if fd = STDIN_FILENO 0
+	if (fd == STDIN_FILENO)
+		return 0;
+
+	// validate buffer
+	valid_user_string ((const char *)buffer);
+
+	// filesys in critical section
+	lock_acquire (&filesys_lock);
+
+	// fd = STDOUT_FILENO 1 or elses
+	if (fd == STDOUT_FILENO)
+		{
+			putbuf (buffer, size);
+			write_length = size;
+		}
+	else
+		{
+			// if there is no such file with fd
+			if ((file = get_file (fd)) == NULL)
+				{
+					lock_release (&filesys_lock);
+					return 0;
+				}
+			write_length = file_write (file, buffer, size);
+		}
+
+	lock_release (&filesys_lock);
+
+	return write_length;
 }
 
 static void
