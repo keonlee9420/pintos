@@ -99,8 +99,13 @@ main (void)
   malloc_init ();
   paging_init ();
 
-  /* Segmentation. */
+	/* Project2 S */
+	/* Process system */
 #ifdef USERPROG
+	process_init();
+
+  /* Segmentation. */
+	/* Project2 E */
   tss_init ();
   gdt_init ();
 #endif

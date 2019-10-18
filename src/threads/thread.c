@@ -644,3 +644,12 @@ alarm_wake(int64_t cur_tick)
 	intr_set_level(old_level);
 }
 /* Project1 E */
+/* Project2 S */
+#ifdef USERPROG
+struct process* 
+thread_process(void)
+{
+	return thread_current()->process;
+}
+#endif
+/* Project2 E */

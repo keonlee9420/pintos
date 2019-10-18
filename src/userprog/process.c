@@ -17,12 +17,34 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+/* Project2 S */
+#include "threads/malloc.h"
+#include "userprog/fd.h"
+/* Project2 E */
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Project2 S */
 static void pass_argument(const char* cmdline, void** esp);
 static void parse_title(char* title, const char* file_name);
+static void setup_child(bool success);
+static bool create_child(tid_t child_tid);
+static struct process* find_process(pid_t child_pid);
+
+/* List for all processes */
+static struct list proc_list;
+static struct lock proclist_lock;
+
+static struct lock filesys_lock;
+
+/* Initialize process system */
+void 
+process_init(void)
+{
+	list_init(&proc_list);
+	lock_init(&proclist_lock);
+	lock_init(&filesys_lock);
+}
 /* Project2 E */
 
 /* Starts a new thread running a user program loaded from
@@ -50,9 +72,20 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
 	/* Project2 S */
   tid = thread_create (file_title, PRI_DEFAULT, start_process, fn_copy);
-  /* Project2 E */
+	
+	/* Return -1 if child thread not created */
 	if (tid == TID_ERROR)
+	{
     palloc_free_page (fn_copy); 
+		return -1;
+	}
+
+	/* Wait for child loading, 
+		 Return -1 when child loading failed */
+	if(!create_child(tid))
+		return -1;
+	/* Project2 E */
+	
   return tid;
 }
 
@@ -73,10 +106,12 @@ start_process (void *file_name_)
 	/* Project2 S */
   if((success = load (file_name, &if_.eip, &if_.esp)))
 		pass_argument(file_name, &if_.esp);
+
+  palloc_free_page (file_name);
+	setup_child(success);
 	/* Project2 E */
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
@@ -100,10 +135,32 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-	alarm_sleep(500);
-  return -1;
+	struct process* p;
+	int status;
+
+	/* Return -1 if 
+		 1; Thread creation or load failed
+		 2. Process struct not exist (called wait more than once)
+		 3. Current process in not a parent of child_tid */
+  if(child_tid == -1 || 
+		 (p = find_process(child_tid)) == NULL || 
+		 p->parent != thread_current())
+		return -1;
+
+	/* Wait until child wakes parent up */
+	while(!p->isexited)
+		sema_down(&p->sema);
+
+	/* Free process resource */
+	status  = p->status;
+	lock_acquire(&proclist_lock);
+	list_remove(&p->elem);
+	lock_release(&proclist_lock);
+	free(p);
+
+	return status;
 }
 
 /* Free the current process's resources. */
@@ -112,6 +169,9 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+	/* Project2 S */
+	struct process* proc;
+	/* Project2 E */
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -129,6 +189,26 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+	/* Project2 S */
+	/* Free holding golbal lock */
+	if(lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
+	if(lock_held_by_current_thread(&proclist_lock))
+		lock_release(&proclist_lock);
+
+	proc = cur->process;
+	if(proc != NULL)
+	{
+		printf("%s: exit(%d)\n", thread_name(), proc->status);
+		/* Collapse fd structs */
+		fd_collapse();
+		/* Mark as exited */
+		proc->isexited = true;
+		/* Signal to parent */
+		sema_up(&proc->sema);
+	}
+	/* Project2 E */
 }
 
 /* Sets up the CPU for running user code in the current
@@ -243,7 +323,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
 	/* Project2 S */
-  file = filesys_open (file_title);
+  lock_acquire(&filesys_lock);
+	file = filesys_open (file_title);
 	/* Project2 E */
   if (file == NULL) 
     {
@@ -335,7 +416,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
-  return success;
+  /* Project2 S */
+	lock_release(&filesys_lock);
+	/* Project2 E */
+	return success;
 }
 
 /* load() helpers. */
@@ -539,3 +623,89 @@ parse_title(char* title, const char* file_name)
 	palloc_free_page(file_copy);
 }
 
+/* Create child process, then wait for child loading */
+static bool 
+create_child(tid_t child_tid)
+{
+	bool success;
+
+	/* Create child process struct */
+	struct process* p = malloc(sizeof(struct process));
+	p->pid = child_tid;
+	p->parent = thread_current();
+	p->isexited = false;
+	p->status = -1;
+	list_init(&p->filelist);
+	sema_init(&p->sema, 0);
+
+	lock_acquire(&proclist_lock);
+	list_push_front(&proc_list, &p->elem);
+	lock_release(&proclist_lock);
+
+	sema_down(&p->sema);
+
+	/* Free resources if load failed */
+	if(!(success = p->loaded))
+	{
+		lock_acquire(&proclist_lock);
+		list_remove(&p->elem);
+		lock_release(&proclist_lock);
+		free(p);
+	}
+
+	return success;
+}
+
+/* Setup current process, then wake parent up */
+static void 
+setup_child(bool success)
+{
+	struct process* proc;
+	/* Wair for own process struct created */
+	while((proc = find_process(thread_tid())) == NULL)
+		thread_yield();
+
+	/* Save load condition and connect process with thread */
+	proc->loaded = success;
+	thread_current()->process = proc;
+
+	/* Wake parent up */
+	sema_up(&proc->sema);
+}
+
+/* Find process struct with pid */
+static struct process* 
+find_process(pid_t pid)
+{
+	struct list_elem* e;
+	struct process* p;
+
+	/* Find process list */
+	lock_acquire(&proclist_lock);
+	for(e = list_begin(&proc_list); e != list_end(&proc_list); 
+			e = list_next(e))
+	{
+		p = list_entry(e, struct process, elem);
+		if(p->pid == pid)
+		{
+			lock_release(&proclist_lock);
+			return p;
+		}
+	}
+	lock_release(&proclist_lock);
+
+	return NULL;
+}
+
+/* Filesystem lock wrapper */
+void 
+process_acquire_filesys(void)
+{
+	lock_acquire(&filesys_lock);
+}
+
+void 
+process_release_filesys(void)
+{
+	lock_release(&filesys_lock);
+}
