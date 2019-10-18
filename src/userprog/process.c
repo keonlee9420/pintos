@@ -37,10 +37,13 @@ static bool create_process(tid_t child_tid);
 static struct list proc_list;
 static struct lock lock_proclist;
 
+static struct lock filesys_lock;
+
 /* Initialize process system */
 void 
 process_init(void)
 {
+	lock_init(&filesys_lock);
 	lock_init(&lock_proclist);
 	list_init(&proc_list);
 }
@@ -190,6 +193,12 @@ process_exit (void)
     }
 
 	/* Project2 S */
+	/* Free holding global lock */
+	if(lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
+	if(lock_held_by_current_thread(&lock_proclist))
+		lock_release(&lock_proclist);
+
 	proc = cur->process;
 	if(proc != NULL)
 	{
@@ -315,7 +324,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
 	file_title = get_title(file_name);
 
   /* Open executable file. */
-  file = filesys_open (file_title);
+  lock_acquire(&filesys_lock);
+	file = filesys_open (file_title);
 	free(file_title);
 	/* Project2 E */
   if (file == NULL) 
@@ -408,6 +418,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+	lock_release(&filesys_lock);
   return success;
 }
 
@@ -655,7 +666,7 @@ setup_process(bool success)
 	while((proc = process_find(thread_tid())) == NULL)
 		thread_yield();
 
-	/* record load condition */
+	/* Record load condition */
 	proc->success = success;
 	thread_current()->process = proc;
 
@@ -685,6 +696,18 @@ process_find(pid_t pid)
 	}
 	lock_release(&lock_proclist);
 	return NULL;
+}
+
+void 
+process_acquire_filesys(void)
+{
+	lock_acquire(&filesys_lock);
+}
+
+void 
+process_release_filesys(void)
+{
+	lock_release(&filesys_lock);
 }
 /* Project2 E */
 

@@ -82,7 +82,9 @@ fd_collapse(void)
 	{
 		struct file_descriptor* f = list_entry(list_pop_front(filelist), 
 																					 struct file_descriptor, elem);
+		process_acquire_filesys();
 		file_close(f->file);
+		process_release_filesys();
 		free(f);
 	}
 }

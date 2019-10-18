@@ -96,7 +96,7 @@ syscall_handler (struct intr_frame *f)
 			sc_close(read_user(esp + 4));
 			break;
 		default:
-			printf("Unvalid system call\n");
+			NOT_REACHED();
 	}
 }
 
@@ -157,11 +157,8 @@ validate_string(const char* str)
 	{
 		ptr = (const uint8_t*)str++;
 
-		if(!is_user_vaddr(ptr))
-			sc_exit(-1);
-			
-		result = get_user(ptr);
-		if(result == -1)
+		if(!is_user_vaddr(ptr) || 
+			 (result = get_user(ptr)) == -1)
 			sc_exit(-1);
 
 	}while(result);
@@ -204,16 +201,28 @@ sc_wait(pid_t pid)
 static bool 
 sc_create(const char* file, unsigned initial_size)
 {
+	bool success;
 	validate_string(file);
-	return filesys_create(file, initial_size);
+
+	process_acquire_filesys();
+	success = filesys_create(file, initial_size);
+	process_release_filesys();
+
+	return success;
 }
 
 /* Remove FILE */
 static bool 
 sc_remove(const char* file)
 {
+	bool success;
 	validate_string(file);
-	return filesys_remove(file);
+
+	process_acquire_filesys();
+	success = filesys_remove(file);
+	process_release_filesys();
+
+	return success;
 }
 
 /* Open FILE. 
@@ -225,11 +234,16 @@ sc_open(const char* file)
 
 	validate_string(file);
 
+	process_acquire_filesys();
 	if((file_opened = filesys_open(file)) == NULL)
+	{
+		process_release_filesys();
 		return -1;
+	}
 
 	if(!strcmp(thread_name(), file))
 		file_deny_write(file_opened);
+	process_release_filesys();
 
 	return fd_open(file_opened);
 }
@@ -270,19 +284,22 @@ sc_read(int fd, void* buffer, unsigned size)
 		default:
 		{
 			struct file* file = fd_convert(fd);
+			uint8_t* data;
+			unsigned readsize;
 			if(file == NULL)
 				return 0;
 
-			uint8_t* data = malloc(size);
-			unsigned readsize = file_read(file, data, size);
+			data = malloc(size);
+			process_acquire_filesys();
+			readsize = file_read(file, data, size);
+			process_release_filesys();
+
 			for(i = 0; i < readsize; i++)
-			{
 				if(!is_user_vaddr(buffer) || !put_user(buffer++, data[i]))
 				{
 					free(data);
 					sc_exit(-1);
 				}
-			}
 			free(data);
 			return readsize;
 		}
@@ -296,6 +313,7 @@ static int
 sc_write(int fd, const void* buffer, unsigned size)
 {
 	struct file* file;
+	int readsize;
 	validate_string(buffer);
 	switch(fd)
 	{
@@ -303,12 +321,14 @@ sc_write(int fd, const void* buffer, unsigned size)
 			return 0;
 		case STDOUT_FILENO:
 			putbuf(buffer, size);
-			return size;
-			
+			return size;		
 		default:
 			if((file = fd_convert(fd)) == NULL)
 				return 0;
-			return file_write(file, buffer, size);
+			process_acquire_filesys();
+			readsize = file_write(file, buffer, size);
+			process_release_filesys();
+			return readsize;
 	}
 }
 
@@ -319,7 +339,10 @@ sc_seek(int fd, unsigned position)
 	struct file* file = fd_convert(fd);
 	if(file == NULL)
 		return;
+
+	process_acquire_filesys();
 	file_seek(file, position);
+	process_release_filesys();
 }
 
 /* Tell current reading position of file from FD */
@@ -327,9 +350,16 @@ static unsigned
 sc_tell(int fd)
 {
 	struct file* file = fd_convert(fd);
+	unsigned pos;
+
 	if(file == NULL)
 		return 0;
-	return file_tell(file);
+
+	process_acquire_filesys();
+	pos = file_tell(file);
+	process_release_filesys();
+
+	return pos;
 }
 
 /* Close file of FD. 
@@ -338,7 +368,10 @@ static void
 sc_close(int fd)
 {
 	struct file* file = fd_close(fd);
-	if(file != NULL)
-		file_close(file);
+	if(file == NULL)
+		return;
+	process_acquire_filesys();
+	file_close(file);
+	process_release_filesys();
 }
 

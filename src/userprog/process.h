@@ -24,6 +24,8 @@ struct process
 };
 
 void process_init(void);
+void process_acquire_filesys(void);
+void process_release_filesys(void);
 /* Project2 E */
 
 tid_t process_execute (const char *file_name);
