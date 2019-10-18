@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 /* Project2 S */
+#include "userprog/syscall.h"
 /* Project2 E */
 
 static thread_func start_process NO_RETURN;
@@ -163,7 +164,7 @@ process_wait (tid_t child_tid)
   struct process *child = get_child (pid, children);
 
   // wait for the child
-  if (child && child->status == PROCESS_LOADED)
+  if (child)
   {
     sema_down (&child->sema);
     status = child->exit_status;
@@ -199,10 +200,14 @@ process_exit (void)
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+
       /* Project2 S */
+      
       // notify parent about child's success
       struct process *child = thread_current ()->process;
       sema_up (&child->sema);
+      // empty fd_list
+      sys_close_all ();
       /* Project2 E */
     }
 }

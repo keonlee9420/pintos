@@ -71,6 +71,7 @@ fd_pop_file (int fd)
         {
           file = fd_data->file;
           list_remove (e);
+          free (fd_data);
           return file;
         }
     }

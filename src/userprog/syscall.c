@@ -228,8 +228,6 @@ void
 sys_exit (int status)
 {
 	struct process *p;
-  struct fd_data *fd_data;
-  struct list_elem *e;
 
 	// print msg for exit status
 	printf ("%s: exit(%d)\n", thread_name (), status);
@@ -240,12 +238,7 @@ sys_exit (int status)
 	p->status = status ? PROCESS_SUCCESS : PROCESS_ERROR;
 
 	// close all open file if exist
-	while (!list_empty (&p->fd_list))
-	{
-		e = list_pop_front (&p->fd_list);
-		fd_data = list_entry (e, struct fd_data, elem);
-		sys_close (fd_data->fd);
-	}
+	sys_close_all ();
 
 	thread_exit ();
 }
@@ -470,6 +463,21 @@ sys_close (int fd)
 			file_close (file);
 		}
 	lock_release (&filesys_lock);
+}
+
+void
+sys_close_all (void)	
+{
+	struct process *p = thread_current ()->process;
+	struct fd_data *fd_data;
+  struct list_elem *e;
+
+	while (!list_empty (&p->fd_list))
+	{
+		e = list_pop_front (&p->fd_list);
+		fd_data = list_entry (e, struct fd_data, elem);
+		sys_close (fd_data->fd);
+	}
 }
 
 /* Project2 E */
