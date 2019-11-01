@@ -97,6 +97,11 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
         PANIC ("palloc_get: out of pages");
     }
 
+  // if (flags & PAL_USER)
+  // {
+  //   printf ("INNER palloc_get_multiple: vaddr=%d, paddr=%d, is_user_vaddr?=%d, flags & PAL_USER=%d, pagenum=%d\n", pages, vtop(pages), is_user_vaddr (pages), flags & PAL_USER, pg_no(pages));
+  // }
+
   return pages;
 }
 

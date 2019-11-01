@@ -21,6 +21,9 @@
 #include "threads/malloc.h"
 #include "userprog/fd.h"
 /* Project2 E */
+/* Project3 S */
+#include "vm/frame.h"
+/* Project3 E */
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -424,7 +427,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
+// static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -559,15 +562,24 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
-
+  
+  /* Project3 S */
+  bool result;
+  
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
+  result = (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+
+  /* Allocate frame for KPAGE(which is from user pool) */
+  allocate_frame (upage, kpage, t);
+
+  return result;
+  /* Project3 E */
 }
 
 /* Project2 S */
