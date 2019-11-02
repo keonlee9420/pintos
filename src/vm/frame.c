@@ -2,6 +2,7 @@
 #include "threads/pte.h"
 #include "threads/malloc.h"
 
+/* Initialize frame page table */
 void 
 framing_init (void)
 {
@@ -9,6 +10,7 @@ framing_init (void)
   lock_init (&frame_table_lock);
 }
 
+/* Create and return new frame */
 static struct frame *
 frame_create (void *upage, void *kpage, struct thread *user)
 {
@@ -29,6 +31,7 @@ frame_create (void *upage, void *kpage, struct thread *user)
   return frame;
 }
 
+/* Insert new frame into frame table */
 static void
 frame_insert_table (struct frame *frame)
 {
