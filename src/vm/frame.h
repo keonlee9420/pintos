@@ -22,6 +22,8 @@ struct lock frame_table_lock; /* Frame table lock */
 void framing_init (void);
 
 /* Frame functions */
+struct frame *frame_lookup (void *kpage);
+void free_frame (void *kpage);
 void allocate_frame (void *upage, void *kpage, struct thread *user);
 
 #endif /* vm/frame.h */
