@@ -2,7 +2,7 @@
 #include "threads/pte.h"
 #include "threads/malloc.h"
 
-/* Initialize frame page table */
+/* Initialize frame page table. */
 void 
 framing_init (void)
 {
@@ -10,7 +10,7 @@ framing_init (void)
   lock_init (&frame_table_lock);
 }
 
-/* Create and return new frame */
+/* Create and return new frame. */
 static struct frame *
 frame_create (void *upage, void *kpage, struct thread *user)
 {
@@ -31,7 +31,7 @@ frame_create (void *upage, void *kpage, struct thread *user)
   return frame;
 }
 
-/* Insert new frame into frame table */
+/* Insert new frame into frame table. */
 static void
 frame_insert_table (struct frame *frame)
 {
@@ -59,7 +59,7 @@ frame_lookup (void *kpage)
   return frame;
 }
 
-/* Delete and free the frame which is currently allocated into KPAGE*/
+/* Delete and free the frame which is currently allocated into KPAGE.*/
 void
 free_frame (void *kpage)
 {
@@ -73,7 +73,7 @@ free_frame (void *kpage)
   }
 }
 
-/* Allocate(attach) frame to kernel virtual address KPAGE which might be from user pool */
+/* Allocate(attach) frame to kernel virtual address KPAGE which might be from user pool. */
 void
 allocate_frame (void *upage, void *kpage, struct thread *user)
 {
