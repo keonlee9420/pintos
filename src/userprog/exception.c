@@ -4,6 +4,11 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+/* Project3 S */
+#include "vm/page.h"
+#include "filesys/file.h"
+#include "threads/vaddr.h"
+/* Project3 E */
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -126,6 +131,9 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+  /* Project3 S */
+  struct s_page *s_page;     /* Supplymental page. */
+  /* Project3 E */
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -157,6 +165,48 @@ page_fault (struct intr_frame *f)
 		f->eax = 0xffffffff;
 		return;
 	}
+   /* Project3 S */
+   else
+   {
+      /* Lazy Load */
+      /* Find s_page using fault_addr */
+      s_page = s_page_lookup (pg_round_down(f->eip));
+      // printf ("\nPAGE FAULT!!!, s_page->upage = %d, fault_addr(=upage)=%d, f->eip=%d, f->esp=%d, *esp=%d \n", s_page->upage, fault_addr, f->eip, f->esp, *(int *)f->esp);
+      // printf ("edi=%d\nesi=%d\nebp=%d\nebx=%d\nedx=%d\necx=%d\neax=%d\n",f->edi, f->esi, f->ebp, f->ebx, f->edx, f->ecx, f->eax);
+      // printf ("pg_round_down(f->eip)=%d\n", pg_round_down(f->eip));
+      // intr_dump_frame (f);
+      // printf ("pg_ofs=%d, pg_no=%d", pg_ofs (fault_addr))
+      switch (s_page->loader) 
+      {  
+         case LOAD_FROM_FILE:
+         {
+            int read_len = 0;
+            // printf ("s_page->file=%d, s_page->kpage=%d, s_page->page_read_bytes=%d\n", s_page->file, s_page->kpage, s_page->page_read_bytes);
+            if (read_len = (file_read (s_page->file, s_page->kpage, s_page->page_read_bytes)) != (int) s_page->page_read_bytes)
+            {
+               printf ("\nfile_read len = %d\n\n", read_len);
+               palloc_free_page (s_page->kpage);
+               break;
+            }
+            memset (s_page->kpage + s_page->page_read_bytes, 0, s_page->page_zero_bytes);
+
+            /* Add the page to the process's address space. */
+            if (!install_page (s_page->upage, s_page->kpage, s_page->writable)) 
+            {
+               palloc_free_page (s_page->kpage);
+               break;
+            }
+            return;
+         }
+         case LOAD_FROM_SWAP:
+         {
+            break;
+         }
+         default:
+            break;
+      }
+   }
+   /* Project3 E */
+   
 	thread_exit();
 }
-

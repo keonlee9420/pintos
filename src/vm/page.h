@@ -15,13 +15,16 @@ enum page_loader {
 /* Supplymental page. */
 struct s_page
 {
+  void *upage;                  /* Virtual address. */
+  void *kpage;                  /* Kernel virtual address */
   struct hash_elem hash_elem;   /* Hash table element. */
-  void *addr;                   /* Virtual address. */
   /* Information for lazy loading. */
   enum page_loader loader;      /* Page loader flag. */
   struct file *file;            /* Target loading file if flag is LOAD_FROM_FILE. */
   struct swap *swap;            /* Target loading swap if flag is LOAD_FROM_SWAP. */
+  bool writable;                /* Writable. */
   size_t page_read_bytes;       /* Page read bytes. */
+  size_t page_zero_bytes;       /* Page zero bytes. */
 };
 
 /* Supplymental page table. */
@@ -31,8 +34,8 @@ struct hash s_page_table;
 void supplymental_init (void);
 
 /* Supplymental page table functions. */
-struct s_page *s_page_lookup (void *vaddr);
-bool free_s_page (void *vaddr);
-struct hash_elem *allocate_s_page (void *vaddr, enum page_loader loader, struct file *file, struct swap *swap, size_t page_read_bytes);
+struct s_page *s_page_lookup (void *upage);
+bool free_s_page (void *upage);
+struct hash_elem *allocate_s_page (void *upage, void*kpage, struct file *file, struct swap *swap, bool writable, size_t page_read_bytes, size_t page_zero_bytes);
 
 #endif /* vm/page.h */
