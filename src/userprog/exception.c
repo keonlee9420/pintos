@@ -4,6 +4,14 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+/* Project3 S */
+#include <string.h>
+#include "threads/vaddr.h"
+#include "threads/palloc.h"
+#include "userprog/process.h"
+#include "vm/page.h"
+#include "filesys/file.h"
+/* Project3 E */
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -126,6 +134,9 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+  /* Project3 S */
+  struct s_page *s_page;     /* Supplymental page. */
+  /* Project3 E */
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -151,12 +162,48 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
+	/* Kernel page fault: return -1 */
 	if(!user)
 	{
 		f->eip = (void*) f->eax;
 		f->eax = 0xffffffff;
 		return;
 	}
-	thread_exit();
-}
+   /* Project3 S */
+	else
+	{
+		/* Lazy Load */
+		/* Find s_page using fault_addr */
+		s_page = s_page_lookup (pg_round_down(f->eip));
+		switch (s_page->loader) 
+		{  
+			case LOAD_FROM_FILE:
+			{
+				int read_len = 0;
+				// printf ("s_page->file=%d, s_page->kpage=%d, s_page->page_read_bytes=%d\n", s_page->file, s_page->kpage, s_page->page_read_bytes);
+				if ((read_len = (file_read (s_page->file, s_page->kpage, s_page->page_read_bytes))) != (int) s_page->page_read_bytes)
+				{
+					printf ("\nfile_read len = %d\n\n", read_len);
+					palloc_free_page (s_page->kpage);
+					break;
+				}
+				memset (s_page->kpage + s_page->page_read_bytes, 0, s_page->page_zero_bytes);
 
+				/* Add the page to the process's address space. */
+				if (!install_page (s_page->upage, s_page->kpage, s_page->writable)) 
+				{
+					palloc_free_page (s_page->kpage);
+					break;
+				}
+				return;
+			}
+			case LOAD_FROM_SWAP:
+			{
+				break;
+			}
+			default:
+				break;
+		}
+	}
+   /* Project3 E */
+}

@@ -15,7 +15,6 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 /* Project2 E */
-#include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
 

@@ -1,42 +1,88 @@
 #include "vm/frame.h"
-#include <stdio.h>
-#include <bitmap.h>
-#include <round.h>
-#include "threads/init.h"
-#include "threads/palloc.h"
-#include "threads/loader.h"
-#include "threads/vaddr.h"
+#include "threads/pte.h"
+#include "threads/malloc.h"
 
-//static uint32_t* frame_base;
-struct bitmap* frame_table;
-
+/* Initialize frame page table. */
 void 
-frame_init(void)
+framing_init (void)
 {
-	/* Maximum number of frame */
-	size_t max_page_cnt = (ptov(init_ram_pages * PGSIZE) - ptov(1024 * 1024)) / PGSIZE - 2; 
-
-	/* Initialize bitmap into frame table, 
-	   to be able to represent all physical frames */
-	size_t bm_page_cnt = DIV_ROUND_UP(bitmap_buf_size(max_page_cnt), PGSIZE);
-
-	frame_table = palloc_get_multiple(PAL_USER | PAL_ASSERT | PAL_ZERO, 
-																	 bm_page_cnt);
-	frame_table = bitmap_create_in_buf(max_page_cnt, frame_table, 
-																		 bm_page_cnt * PGSIZE);
-
-	printf("frame table allocated: %d pages at %p\n", max_page_cnt, frame_table);
-}
-/*
-void 
-frame_check
-
-void 
-frame_alloc(uint32_t paddr)
-{
-	bitmap_mark(frame_table, paddr);
+  list_init (&frame_table);
+  lock_init (&frame_table_lock);
 }
 
-void 
-frame_released(
-*/
+/* Create and return new frame. */
+static struct frame *
+frame_create (void *upage, void *kpage, struct thread *user)
+{
+  struct frame *frame = malloc(sizeof(struct frame));
+  uint32_t *page_table;
+  uint32_t *page_table_entry;
+  size_t pde_idx = pd_no (upage);
+  size_t pte_idx = pt_no (upage);
+
+  page_table = pde_get_pt (user->pagedir[pde_idx]);
+  page_table_entry = (uint32_t *)page_table[pte_idx];
+
+  frame->kpage = kpage;
+  frame->upage = upage;
+  frame->pte = page_table_entry;
+  frame->user = user;
+
+  return frame;
+}
+
+/* Insert new frame into frame table. */
+static void
+frame_insert_table (struct frame *frame)
+{
+	lock_acquire(&frame_table_lock);
+  list_push_front (&frame_table, &frame->elem);
+	lock_release(&frame_table_lock);
+}
+
+/* Returns the frame containing the given kernel virtual memory KPAGE,
+   or a null pointer if no such frame exists. */
+struct frame *
+frame_lookup (void *kpage)
+{
+  struct frame *frame = NULL;
+  struct list_elem *e;
+
+  for (e = list_begin (&frame_table); e != list_end (&frame_table);
+        e = list_next (e))
+    {
+      frame = list_entry (e, struct frame, elem);
+      if (frame->kpage == kpage)
+        return frame;
+    }
+
+  return frame;
+}
+
+/* Delete and free the frame which is currently allocated into KPAGE.*/
+void
+free_frame (void *kpage)
+{
+  struct frame *frame;
+
+  frame = frame_lookup (kpage);
+  if (frame != NULL)
+  {
+    lock_acquire (&frame_table_lock);
+    list_remove (&frame->elem);
+    lock_release (&frame_table_lock);
+    free(frame);
+  }
+}
+
+/* Allocate(attach) frame to kernel virtual address KPAGE which might be from user pool. */
+void
+allocate_frame (void *upage, void *kpage, struct thread *user)
+{
+  struct frame *frame;
+
+  ASSERT ((user->pagedir)[pd_no (upage)] != 0);
+
+  frame = frame_create (upage, kpage, user);
+  frame_insert_table (frame);
+}

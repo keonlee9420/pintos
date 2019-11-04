@@ -40,6 +40,7 @@
 /* Project3 S */
 #ifdef VM
 #include "vm/frame.h"
+#include "vm/page.h"
 #endif
 /* Project3 E */
 
@@ -103,12 +104,12 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
-
-	/* Project3 S */
+  /* Project3 S */
 #ifdef VM
-	frame_init();
+  framing_init ();
+  supplymental_init ();
 #endif
-	/* Project3 E */
+  /* Project3 E */
 
 	/* Project2 S */
 	/* Process system */
