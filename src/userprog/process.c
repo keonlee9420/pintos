@@ -35,7 +35,8 @@ static struct process* find_process(pid_t child_pid);
 static struct list proc_list;
 static struct lock proclist_lock;
 
-static struct lock filesys_lock;
+/* Lock for file system usage */
+struct lock filesys_lock;
 
 /* Initialize process system */
 void 
@@ -697,15 +698,4 @@ find_process(pid_t pid)
 	return NULL;
 }
 
-/* Filesystem lock wrapper */
-void 
-process_acquire_filesys(void)
-{
-	lock_acquire(&filesys_lock);
-}
-
-void 
-process_release_filesys(void)
-{
-	lock_release(&filesys_lock);
-}
+/* Project2 E */

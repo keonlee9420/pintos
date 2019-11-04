@@ -37,6 +37,11 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+/* Project3 S */
+#ifdef VM
+#include "vm/frame.h"
+#endif
+/* Project3 E */
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -70,7 +75,7 @@ static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
 #endif
 
-int main (void) NO_RETURN;
+int main (void) /*NO_RETURN*/;
 
 /* Pintos main program. */
 int
@@ -98,6 +103,12 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
+
+	/* Project3 S */
+#ifdef VM
+	frame_init();
+#endif
+	/* Project3 E */
 
 	/* Project2 S */
 	/* Process system */

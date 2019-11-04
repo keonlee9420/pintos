@@ -15,6 +15,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 /* Project2 E */
+#include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -237,9 +238,9 @@ sys_create(const char* file, unsigned initial_size)
 
 	valid_string(file);
 
-	process_acquire_filesys();
+	lock_acquire(&filesys_lock);
 	success = filesys_create(file, initial_size);
-	process_release_filesys();
+	lock_release(&filesys_lock);
 
 	return success;
 }
@@ -251,9 +252,9 @@ sys_remove(const char* file)
 
 	valid_string(file);
 
-	process_acquire_filesys();
+	lock_acquire(&filesys_lock);
 	success = filesys_remove(file);
-	process_release_filesys();
+	lock_release(&filesys_lock);
 
 	return success;
 }
@@ -266,7 +267,7 @@ sys_open(const char* filename)
 
 	valid_string(filename);
 
-	process_acquire_filesys();
+	lock_acquire(&filesys_lock);
 	if((file = filesys_open(filename)) == NULL)
 		goto done;
 
@@ -276,7 +277,7 @@ sys_open(const char* filename)
 		file_deny_write(file);
 
 	done:
-		process_release_filesys();
+		lock_release(&filesys_lock);
 		return fd;	
 }
 
@@ -289,9 +290,9 @@ sys_filesize(int fd)
 	if(file == NULL)
 		return 0;
 
-	process_acquire_filesys();
+	lock_acquire(&filesys_lock);
 	filesize = file_length(file);
-	process_release_filesys();
+	lock_release(&filesys_lock);
 
 	return filesize;
 }
@@ -327,9 +328,9 @@ sys_read(int fd, void* buffer, unsigned size)
 
 			bytes = malloc(size);
 
-			process_acquire_filesys();
+			lock_acquire(&filesys_lock);
 			readsize = file_read(file, bytes, size);
-			process_release_filesys();
+			lock_release(&filesys_lock);
 
 			for(i = 0; i < readsize; i++)
 				if(!write_buffer(buffer + i, bytes[i]))
@@ -365,9 +366,9 @@ sys_write(int fd, const void* buffer, unsigned size)
 
 			valid_string(buffer);
 
-			process_acquire_filesys();
+			lock_acquire(&filesys_lock);
 			writesize = file_write(file, buffer, size);
-			process_release_filesys();
+			lock_release(&filesys_lock);
 			
 			return writesize;
 		}
@@ -382,9 +383,9 @@ sys_seek(int fd, unsigned position)
 	if(file == NULL)
 		return;
 
-	process_acquire_filesys();
+	lock_acquire(&filesys_lock);
 	file_seek(file, position);
-	process_release_filesys();
+	lock_release(&filesys_lock);
 }
 
 static unsigned 
@@ -396,9 +397,9 @@ sys_tell(int fd)
 	if(file == NULL)
 		return 0;
 
-	process_acquire_filesys();
+	lock_acquire(&filesys_lock);
 	position = file_tell(file);
-	process_release_filesys();
+	lock_release(&filesys_lock);
 
 	return position;
 }
@@ -410,9 +411,9 @@ sys_close(int fd)
 
 	if(file != NULL)
 	{				
-		process_acquire_filesys();
+		lock_acquire(&filesys_lock);
 		file_close(file);
-		process_release_filesys();
+		lock_release(&filesys_lock);
 	}
 }
 /* Project2 E */
