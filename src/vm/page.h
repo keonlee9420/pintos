@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "lib/kernel/hash.h"
 #include "vm/swap.h"
+#include "threads/synch.h"
 
 /* Page loader flag. */
 enum page_loader {
@@ -28,7 +29,8 @@ struct s_page
 };
 
 /* Supplymental page table. */
-struct hash s_page_table;
+struct hash s_page_table;      /* Supplymental page table supplements the page table with additional data about each page. */
+struct lock s_page_table_lock; /* Supplymental page table lock. */
 
 /* Initialization function. */
 void supplymental_init (void);

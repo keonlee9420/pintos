@@ -10,6 +10,7 @@ void
 supplymental_init ()
 {
   hash_init (&s_page_table, hash_func, hash_less, NULL);
+  lock_init (&s_page_table_lock);
 }
 
 /* Create and return new supplymental page. */
@@ -38,10 +39,14 @@ s_page_create (void *upage, void*kpage, struct file *file, struct swap *swap, bo
 static struct hash_elem *
 s_page_insert (struct s_page *p)
 {
+  struct hash_elem *hash_elem;
   /* Searches hash for an element equal to element. If none is found, inserts element into
      hash and returns a null pointer. If the table already contains an element equal to
      element, it is returned without modifying hash. */
-  return hash_insert (&s_page_table, &p->hash_elem);
+  lock_acquire (&s_page_table_lock);
+  hash_elem = hash_insert (&s_page_table, &p->hash_elem);
+  lock_release (&s_page_table_lock);
+  return hash_elem;
 }
 
 /* Returns the supplymental page containing the given virtual address,
@@ -72,7 +77,9 @@ free_s_page (void *upage)
   {
     /* Searches hash for an element equal to element. If one is found, it is removed from
        hash and returned. Otherwise, a null pointer is returned and hash is unchanged. */
+    lock_acquire (&s_page_table_lock);
     hash_elem = hash_delete (&s_page_table, &s_page->hash_elem);
+    lock_release (&s_page_table_lock);
     if (hash_elem == NULL)
       return false;
     free (hash_elem);

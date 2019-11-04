@@ -68,7 +68,9 @@ free_frame (void *kpage)
   frame = frame_lookup (kpage);
   if (frame != NULL)
   {
+    lock_acquire (&frame_table_lock);
     list_remove (&frame->elem);
+    lock_release (&frame_table_lock);
     free(frame);
   }
 }
