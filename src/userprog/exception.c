@@ -5,6 +5,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 /* Project3 S */
+#include <string.h>
+#include "threads/palloc.h"
 #include "vm/page.h"
 #include "filesys/file.h"
 #include "threads/vaddr.h"
@@ -132,7 +134,7 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
   /* Project3 S */
-  struct s_page *s_page;     /* Supplymental page. */
+  struct s_page *s_page;     /* Supplemental page. */
   /* Project3 E */
 
   /* Obtain faulting address, the virtual address that was
@@ -170,19 +172,17 @@ page_fault (struct intr_frame *f)
    {
       /* Lazy Load */
       /* Find s_page using fault_addr */
-      s_page = s_page_lookup (pg_round_down(f->eip));
-      // printf ("\nPAGE FAULT!!!, s_page->upage = %d, fault_addr(=upage)=%d, f->eip=%d, f->esp=%d, *esp=%d \n", s_page->upage, fault_addr, f->eip, f->esp, *(int *)f->esp);
-      // printf ("edi=%d\nesi=%d\nebp=%d\nebx=%d\nedx=%d\necx=%d\neax=%d\n",f->edi, f->esi, f->ebp, f->ebx, f->edx, f->ecx, f->eax);
-      // printf ("pg_round_down(f->eip)=%d\n", pg_round_down(f->eip));
+      s_page = s_page_lookup (pg_round_down(fault_addr));
       // intr_dump_frame (f);
-      // printf ("pg_ofs=%d, pg_no=%d", pg_ofs (fault_addr))
       switch (s_page->loader) 
       {  
          case LOAD_FROM_FILE:
          {
             int read_len = 0;
-            // printf ("s_page->file=%d, s_page->kpage=%d, s_page->page_read_bytes=%d\n", s_page->file, s_page->kpage, s_page->page_read_bytes);
-            if (read_len = (file_read (s_page->file, s_page->kpage, s_page->page_read_bytes)) != (int) s_page->page_read_bytes)
+            file_seek (s_page->file, s_page->ofs);
+
+            printf ("\n[PAGE FAULT] upage=%p, kpage=%p, ofs=%d, file=%p, file_tell=%p, file_length=%p, inode=%p\n\n", s_page->upage, s_page->kpage, s_page->ofs, s_page->file, file_tell (s_page->file), file_length (s_page->file), file_get_inode (s_page->file));
+            if ((read_len = (file_read (s_page->file, s_page->kpage, s_page->page_read_bytes))) != (int) s_page->page_read_bytes)
             {
                printf ("\nfile_read len = %d\n\n", read_len);
                palloc_free_page (s_page->kpage);

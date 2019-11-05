@@ -217,6 +217,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       /* Number of bytes to actually copy out of this sector. */
       int chunk_size = size < min_left ? size : min_left;
+      printf ("inner inode_read_at, %d, %d, inode_length=%d, inode=%p\n", inode_left, sector_left, inode_length (inode), inode);
+
       if (chunk_size <= 0)
         break;
 

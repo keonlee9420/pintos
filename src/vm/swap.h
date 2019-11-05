@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <stdint.h>
 #include <list.h>
-#include "lib/kernel/hash.h"
+#include <hash.h>
 
 struct swap
 {

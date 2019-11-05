@@ -107,7 +107,7 @@ main (void)
   /* Project3 S */
 #ifdef VM
   framing_init ();
-  supplymental_init ();
+  supplemental_init ();
 #endif
   /* Project3 E */
 
