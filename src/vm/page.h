@@ -41,5 +41,6 @@ void spt_destroy(void);
 bool spage_free (void *upage);
 bool spage_allocate (void* upage, uint32_t pte);
 void spage_out(void* upage);
+struct spage* spage_lookup(void* upage);
 
 #endif /* vm/page.h */
