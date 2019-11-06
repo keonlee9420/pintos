@@ -105,6 +105,12 @@ struct thread
 		/* Project2 E */
 #endif
 
+		/* Project3 S */
+#ifdef VM
+		struct hash* spt;										/* Supplemental Page Table */
+#endif
+		/* Project3 E */
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

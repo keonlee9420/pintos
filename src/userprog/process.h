@@ -24,17 +24,11 @@ struct process
 extern struct lock filesys_lock;
 
 void process_init(void);
-void process_acquire_filesys(void);
-void process_release_filesys(void);
 /* Project2 E */
 
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
-
-/* Project3 S */
-bool install_page (void *upage, void *kpage, bool writable);
-/* Project3 E */
 
 #endif /* userprog/process.h */

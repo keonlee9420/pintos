@@ -76,7 +76,7 @@ static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
 #endif
 
-int main (void) /*NO_RETURN*/;
+int main (void);
 
 /* Pintos main program. */
 int
@@ -106,8 +106,7 @@ main (void)
   paging_init ();
   /* Project3 S */
 #ifdef VM
-  framing_init ();
-  supplymental_init ();
+  frame_init ();
 #endif
   /* Project3 E */
 

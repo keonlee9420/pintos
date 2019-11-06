@@ -1,88 +1,107 @@
 #include "vm/frame.h"
 #include "threads/pte.h"
 #include "threads/malloc.h"
+#include "threads/palloc.h"
+
+/* Frame table list variables */
+static struct list frame_table;
+static struct lock frame_table_lock;
+
+static struct frame* lookup_frame(void* kpage);
 
 /* Initialize frame page table. */
 void 
-framing_init (void)
+frame_init (void)
 {
   list_init (&frame_table);
   lock_init (&frame_table_lock);
 }
 
 /* Create and return new frame. */
-static struct frame *
-frame_create (void *upage, void *kpage, struct thread *user)
+void*
+frame_allocate (enum palloc_flags flags)
 {
-  struct frame *frame = malloc(sizeof(struct frame));
-  uint32_t *page_table;
-  uint32_t *page_table_entry;
-  size_t pde_idx = pd_no (upage);
-  size_t pte_idx = pt_no (upage);
+	void* kpage = palloc_get_page(PAL_USER | flags);
+	
+	if(kpage == NULL)
+		return NULL;		//Need to implement swap here
 
-  page_table = pde_get_pt (user->pagedir[pde_idx]);
-  page_table_entry = (uint32_t *)page_table[pte_idx];
+	/* Create mapped physical page */
+  struct frame *frame = malloc(sizeof(struct frame));
 
   frame->kpage = kpage;
-  frame->upage = upage;
-  frame->pte = page_table_entry;
-  frame->user = user;
+  frame->user = thread_current();
 
-  return frame;
-}
-
-/* Insert new frame into frame table. */
-static void
-frame_insert_table (struct frame *frame)
-{
+	/* Insert into frame list */
 	lock_acquire(&frame_table_lock);
-  list_push_front (&frame_table, &frame->elem);
+  list_push_back (&frame_table, &frame->elem);
 	lock_release(&frame_table_lock);
-}
 
-/* Returns the frame containing the given kernel virtual memory KPAGE,
-   or a null pointer if no such frame exists. */
-struct frame *
-frame_lookup (void *kpage)
-{
-  struct frame *frame = NULL;
-  struct list_elem *e;
-
-  for (e = list_begin (&frame_table); e != list_end (&frame_table);
-        e = list_next (e))
-    {
-      frame = list_entry (e, struct frame, elem);
-      if (frame->kpage == kpage)
-        return frame;
-    }
-
-  return frame;
+  return kpage;
 }
 
 /* Delete and free the frame which is currently allocated into KPAGE.*/
 void
-free_frame (void *kpage)
+frame_free (void *kpage)
 {
   struct frame *frame;
 
-  frame = frame_lookup (kpage);
+  frame = lookup_frame (kpage);
   if (frame != NULL)
   {
     lock_acquire (&frame_table_lock);
     list_remove (&frame->elem);
     lock_release (&frame_table_lock);
     free(frame);
+		palloc_free_page(kpage);
   }
 }
 
-/* Allocate(attach) frame to kernel virtual address KPAGE which might be from user pool. */
-void
-allocate_frame (void *upage, void *kpage, struct thread *user)
+/* Repush frame on top of frame stack for victim selection
+	 Reinsertion called when pagedir_get_page succeed */
+void 
+frame_reinsert(void* kpage)
 {
-  struct frame *frame;
+	struct frame* frame = lookup_frame(kpage);
+	
+	ASSERT(frame != NULL);
 
-  ASSERT ((user->pagedir)[pd_no (upage)] != 0);
-
-  frame = frame_create (upage, kpage, user);
-  frame_insert_table (frame);
+	lock_acquire(&frame_table_lock);
+	list_remove(&frame->elem);
+	list_push_back(&frame_table, &frame->elem);
+	lock_release(&frame_table_lock);
 }
+
+/* Select victim page to be swapped out */
+struct frame* 
+frame_select_victim(void)
+{
+	struct frame* frame;
+
+	ASSERT(!list_empty(&frame_table));
+	
+	lock_acquire(&frame_table_lock);
+	frame = list_entry(list_pop_front(&frame_table), struct frame, elem);
+	lock_release(&frame_table_lock);
+	
+	return frame;
+}
+
+/* Returns the frame containing the given kernel virtual memory KPAGE,
+   or a null pointer if no such frame exists. */
+static struct frame *
+lookup_frame (void *kpage)
+{
+  struct frame *frame = NULL;
+  struct list_elem *e;
+
+  for (e = list_begin (&frame_table); e != list_end (&frame_table);
+       e = list_next (e))
+    {
+      frame = list_entry (e, struct frame, elem);
+      if (frame->kpage == kpage)
+        return frame;
+    }
+  return frame;
+}
+

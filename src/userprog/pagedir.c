@@ -5,6 +5,11 @@
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
+/* Project3 S */
+#include "threads/thread.h"
+#include "vm/frame.h"
+#include "vm/page.h"
+/* Project3 E */
 
 static uint32_t *active_pd (void);
 static void invalidate_pagedir (uint32_t *);
@@ -40,10 +45,13 @@ pagedir_destroy (uint32_t *pd)
         uint32_t *pte;
         
         for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
-          if (*pte & PTE_P) 
-            palloc_free_page (pte_get_page (*pte));
+          if (*pte & PTE_P)
+						/* Project3 S */
+            frame_free(pte_get_page (*pte));
+						/* Project3 E */
         palloc_free_page (pt);
       }
+	spt_destroy();
   palloc_free_page (pd);
 }
 
@@ -112,6 +120,9 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
     {
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
+			/* Project3 S */
+			spage_allocate(upage, *pte);
+			/* Project3 E */
       return true;
     }
   else
@@ -126,12 +137,19 @@ void *
 pagedir_get_page (uint32_t *pd, const void *uaddr) 
 {
   uint32_t *pte;
+	void* kpage;
 
   ASSERT (is_user_vaddr (uaddr));
   
   pte = lookup_page (pd, uaddr, false);
   if (pte != NULL && (*pte & PTE_P) != 0)
-    return pte_get_page (*pte) + pg_ofs (uaddr);
+	{
+		kpage = pte_get_page(*pte);
+		/* Project3 S */
+		frame_reinsert(kpage);
+    return kpage + pg_ofs (uaddr);
+		/* Project3 E */
+	}
   else
     return NULL;
 }
@@ -152,6 +170,7 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
       *pte &= ~PTE_P;
+			spage_out(upage);
       invalidate_pagedir (pd);
     }
 }

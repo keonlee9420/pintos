@@ -4,12 +4,15 @@
 #include <debug.h>
 #include <stdint.h>
 #include <list.h>
-#include "lib/kernel/hash.h"
+#include <hash.h>
 
 struct swap
 {
+	void* upage;
+	struct block* block;
   struct list_elem elem;
 };
 
+void swap_init(void);
 
 #endif /* vm/swap.h */

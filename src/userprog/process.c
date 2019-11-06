@@ -325,6 +325,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+	/* Project3 S */
+	/* Allocate supplemental page table */
+	t->spt = spt_create();
+	/* Project3 E */
+
   /* Open executable file. */
 	/* Project2 S */
   lock_acquire(&filesys_lock);
@@ -428,7 +433,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-// static bool install_page (void *upage, void *kpage, bool writable);
+static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -506,18 +511,26 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+			/* Project3 S */
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
+      uint8_t *kpage = frame_allocate(0);
       if (kpage == NULL)
         return false;
 
-      /* Project3 S */
-      /* Load this page later. 
-         Instead, just save all the information into supplymental page table for now. */
-      allocate_s_page (upage, kpage, file, NULL, writable, page_read_bytes, page_zero_bytes);
-      // printf ("\nAllocate s_page succeed! hash_size=%d, upage=%d, pg_no=%d, pg_ofs=%d\n", hash_size (&s_page_table), upage, pg_no (upage), pg_ofs (upage));
-      // printf ("s_page->file=%d, s_page->kpage=%d, s_page->page_read_bytes=%d\n\n", file, kpage, page_read_bytes);
-      /* Project3 E */
+			/* Load this page. */
+			if(file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
+			{
+				frame_free(kpage);
+				return false;
+			}
+			memset(kpage + page_read_bytes, 0, page_zero_bytes);
+
+			/* Add the page to the process's address space. */
+			if(!install_page(upage, kpage, writable))
+			{
+				frame_free(kpage);
+				return false;
+			}
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -535,7 +548,7 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = frame_allocate(PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
@@ -556,25 +569,15 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-bool
+static bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
   
-  /* Project3 S */
-  bool result;
-  
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  result = (pagedir_get_page (t->pagedir, upage) == NULL
+  return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
-
-  /* Allocate frame for KPAGE(which is from user pool) if install page succeed*/
-  if (result)
-    allocate_frame (upage, kpage, t);
-
-  return result;
-  /* Project3 E */
 }
 
 /* Project2 S */
@@ -702,17 +705,4 @@ find_process(pid_t pid)
 	lock_release(&proclist_lock);
 
 	return NULL;
-}
-
-/* Filesystem lock wrapper */
-void 
-process_acquire_filesys(void)
-{
-	lock_acquire(&filesys_lock);
-}
-
-void 
-process_release_filesys(void)
-{
-	lock_release(&filesys_lock);
 }
