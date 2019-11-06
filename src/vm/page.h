@@ -21,7 +21,7 @@ struct spage
 {
   void *upage;                  /* Virtual page address */
 	uint32_t pte;									/* Page table element (kpage addr + flags) */
-	enum spage_state;							/* Virtual page status */ 
+	enum spage_state status;			/* Virtual page status */ 
 	
 	/* Load From File */
 	struct file* file;						/* Executable file */

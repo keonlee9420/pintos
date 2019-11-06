@@ -8,9 +8,6 @@ static unsigned hash_func (const struct hash_elem *p_, void *aux UNUSED);
 static bool hash_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 static void spt_destructor(struct hash_elem* hash_elem, void* aux UNUSED);
 
-static struct spage* spage_lookup(struct hash* spt, void* upage);
-
-
 /* Initialize supplemental page table built by hash table. */
 struct hash* 
 spt_create(void)
@@ -55,7 +52,7 @@ bool
 spage_free (void *upage)
 {
 	struct hash* spt = thread_current()->spt;
-  struct spage *spage = spage_lookup (spt, upage);
+  struct spage *spage = spage_lookup (upage);
 
 	if(spage == NULL)
 		return false;
@@ -70,8 +67,7 @@ spage_free (void *upage)
 void 
 spage_out(void* upage)
 {
-	struct hash* spt = thread_current()->spt;
-	struct spage* spage = spage_lookup(spt, upage);
+	struct spage* spage = spage_lookup(upage);
 
 	spage->pte &= ~PTE_P;
 }
