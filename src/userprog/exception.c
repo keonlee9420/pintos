@@ -4,6 +4,16 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+/* Project3 S */
+#include "threads/vaddr.h"
+#include "threads/palloc.h"
+#include "userprog/process.h"
+#include "vm/frame.h"
+#include "vm/page.h"
+#include "vm/swap.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+/* Project3 E */
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -108,6 +118,10 @@ kill (struct intr_frame *f)
     }
 }
 
+/* Project3 S */
+static bool lazy_load(struct file* file, struct spage* spage);
+/* Project3 E */
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -161,8 +175,100 @@ page_fault (struct intr_frame *f)
 		f->eax = 0xffffffff;
 		return;
 	}
+	/* Project3 S */
+	/* Error out for outbounded access */
+	if(is_kernel_vaddr(fault_addr) || fault_addr == NULL)
+		thread_exit();
+
 	/* User page fault: follow direction from 
 		 corresponding supplemental page table */
-	spage = spage_lookup(PG_ROUND_DOWN(fault_addr));
-	thread_exit();
+	spage = spage_lookup(pg_round_down(fault_addr));	
+
+	//printf("%p, fault: %p\n", f->esp, fault_addr);
+
+	/* Stack growth */
+	if(spage == NULL)
+	{
+		void* upage = pg_round_down(fault_addr);
+		uint8_t* kpage;
+		
+		if(pg_round_up(fault_addr) < f->esp)
+			thread_exit();
+
+		spage_create(upage, NULL, 0, 0, false);
+		kpage = frame_allocate(PAL_ZERO);
+		if(kpage == NULL)
+			kpage = swap_out();
+		
+		if(!process_install_page(upage, kpage, true))
+		{
+			frame_free(kpage);
+			thread_exit();
+		}
+		return;
+	}
+
+	switch(spage->status)
+	{
+		case SPAGE_PRESENT:
+			thread_exit();
+		case SPAGE_UNLOADED:
+		{
+			struct file* file;
+
+			lock_acquire(&filesys_lock);
+			file = filesys_open(spage->filename);
+			lock_release(&filesys_lock);
+
+			if(!lazy_load(file, spage))
+			{
+				lock_acquire(&filesys_lock);
+				file_close(file);
+				lock_release(&filesys_lock);
+				thread_exit();
+			}
+			break;
+		}
+		case SPAGE_SWAPOUT:
+		{
+			void* upage = pg_round_down(fault_addr);
+			swap_in(upage);
+			break;
+		}
+		case SPAGE_MMAP:
+			if(!lazy_load(spage->mapfile, spage))
+				thread_exit();
+			break;
+	}
+}
+
+static bool 
+lazy_load(struct file* file, struct spage* spage)
+{
+	uint8_t* kpage;
+	bool success = false;
+
+	if(file == NULL)
+		return false;
+		
+	kpage = frame_allocate(PAL_ZERO);
+	if(kpage == NULL)
+		kpage = swap_out();
+
+	lock_acquire(&filesys_lock);
+	file_seek(file, spage->offset);
+	if(file_read(file, kpage, spage->readbyte) != (int) spage->readbyte)
+		goto load_end;
+			
+	if(!process_install_page(spage->upage, kpage, spage->writable))
+		goto load_end;
+	
+	success = true;
+
+	load_end:
+		lock_release(&filesys_lock);
+		spage->status = SPAGE_PRESENT;
+		if(!success)
+			frame_free(kpage);
+		return success;
 }

@@ -7,8 +7,6 @@
 static struct list frame_table;
 static struct lock frame_table_lock;
 
-static struct frame* lookup_frame(void* kpage);
-
 /* Initialize frame page table. */
 void 
 frame_init (void)
@@ -30,7 +28,6 @@ frame_allocate (enum palloc_flags flags)
   struct frame *frame = malloc(sizeof(struct frame));
 
   frame->kpage = kpage;
-  frame->user = thread_current();
 
 	/* Insert into frame list */
 	lock_acquire(&frame_table_lock);
@@ -46,7 +43,7 @@ frame_free (void *kpage)
 {
   struct frame *frame;
 
-  frame = lookup_frame (kpage);
+  frame = frame_lookup (kpage);
   if (frame != NULL)
   {
     lock_acquire (&frame_table_lock);
@@ -62,7 +59,7 @@ frame_free (void *kpage)
 void 
 frame_reinsert(void* kpage)
 {
-	struct frame* frame = lookup_frame(kpage);
+	struct frame* frame = frame_lookup(kpage);
 	
 	ASSERT(frame != NULL);
 
@@ -89,8 +86,8 @@ frame_select_victim(void)
 
 /* Returns the frame containing the given kernel virtual memory KPAGE,
    or a null pointer if no such frame exists. */
-static struct frame *
-lookup_frame (void *kpage)
+struct frame *
+frame_lookup (void *kpage)
 {
   struct frame *frame = NULL;
   struct list_elem *e;
@@ -103,5 +100,13 @@ lookup_frame (void *kpage)
         return frame;
     }
   return frame;
+}
+
+void 
+frame_map(void* upage, void* kpage)
+{
+	struct frame* frame = frame_lookup(kpage);
+	frame->upage = upage;
+	frame->user = thread_current();
 }
 

@@ -40,7 +40,7 @@
 /* Project3 S */
 #ifdef VM
 #include "vm/frame.h"
-#include "vm/page.h"
+#include "vm/swap.h"
 #endif
 /* Project3 E */
 
@@ -107,6 +107,7 @@ main (void)
   /* Project3 S */
 #ifdef VM
   frame_init ();
+	swap_init();
 #endif
   /* Project3 E */
 

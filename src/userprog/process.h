@@ -17,6 +17,7 @@ struct process
 	int status;
 
 	struct list filelist;
+	struct list maplist;
 	struct semaphore sema;
 	struct list_elem elem;
 };
@@ -30,5 +31,9 @@ tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
+
+/* Project3 S */
+bool process_install_page(void* upage, void* kpage, bool writable);
+/* Project3 E */
 
 #endif /* userprog/process.h */

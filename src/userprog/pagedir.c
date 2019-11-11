@@ -121,7 +121,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
 			/* Project3 S */
-			spage_allocate(upage, *pte);
+			spage_map(upage, pte);
 			/* Project3 E */
       return true;
     }
@@ -170,7 +170,6 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
       *pte &= ~PTE_P;
-			spage_out(upage);
       invalidate_pagedir (pd);
     }
 }

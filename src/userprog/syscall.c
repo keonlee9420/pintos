@@ -15,6 +15,9 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 /* Project2 E */
+/* Project3 S */
+#include "vm/page.h"
+/* Project3 E */
 
 static void syscall_handler (struct intr_frame *);
 
@@ -35,6 +38,11 @@ static void sys_seek(int fd, unsigned position);
 static unsigned sys_tell(int fd);
 static void sys_close(int fd);
 /* Project2 E */
+
+/* Project3 S */
+static mapid_t sys_mmap(int fd, void* addr);
+static void sys_munmap(mapid_t mapping);
+/* Project3 E */
 
 void
 syscall_init (void) 
@@ -129,6 +137,21 @@ syscall_handler (struct intr_frame *f)
 			sys_close(fd);
 			break;
 		}
+		/* Project3 S */
+		case SYS_MMAP:
+		{
+			int fd = read_stack(++esp);
+			void* addr = (void*)read_stack(++esp);
+			f->eax = sys_mmap(fd, addr);
+			break;
+		}
+		case SYS_MUNMAP:
+		{
+			mapid_t mapping = (mapid_t)read_stack(++esp);
+			sys_munmap(mapping);
+			break;
+		}
+		/* Project3 E */
 		default:
 			NOT_REACHED();
 	}
@@ -416,3 +439,106 @@ sys_close(int fd)
 	}
 }
 /* Project2 E */
+
+/* Project3 S */
+struct mapid
+{
+	mapid_t mapid;
+	int fd;
+	void* addr;
+	struct list_elem elem;
+};
+
+static mapid_t 
+sys_mmap(int fd, void* addr)
+{
+	struct file* file;
+	size_t fsize;
+	off_t ofs;
+	struct mapid* mapid_data;
+	struct list* maplist = &thread_process()->maplist;
+	unsigned i;
+
+	/* Check fd validity */
+	if(fd == STDOUT_FILENO || fd == STDIN_FILENO)
+		return -1;
+
+	/* Check address validity: Non-null, page-aligned */
+	if(addr == NULL || pg_round_down(addr) != addr)
+		return -1;
+	
+	if((file = fd_get_file(fd)) == NULL)
+		return -1;	
+	
+	/* Create spages for memory mapping */
+	lock_acquire(&filesys_lock);
+	fsize = file_length(file);
+	lock_release(&filesys_lock);
+	ofs = 0;
+
+	/* Check consecutive page vacancy */
+	for(i = 0; i < fsize; i += PGSIZE)
+		if(spage_lookup(addr + i) != NULL)
+			return -1;
+	
+	/* Create supplemental page table */
+	while(fsize > 0)
+	{
+		size_t page_read_bytes = fsize < PGSIZE ? fsize : PGSIZE;
+		struct spage* spage = spage_create(addr, NULL, ofs, page_read_bytes, true);
+		spage->status = SPAGE_MMAP;
+		spage->mapfile = file;
+
+		/* Advance */
+		ofs += page_read_bytes;
+		fsize -= page_read_bytes;
+		addr += PGSIZE;
+	}
+
+	/* Create mapid structure */
+	mapid_data = malloc(sizeof(struct mapid));
+	mapid_data->mapid = list_empty(maplist) ? 3 : 
+									 		list_entry(list_back(maplist), struct mapid, elem)->mapid + 1;
+	mapid_data->fd = fd;
+	mapid_data->addr = addr;
+	list_push_back(maplist, &mapid_data->elem);
+
+	return mapid_data->mapid;
+}
+
+static void 
+sys_munmap(mapid_t mapping)
+{
+	struct mapid* mid = mmap_get(mapping);
+	list_remove(&mid->elem);
+	free(mid);
+}
+
+void 
+mmap_destroy(void)
+{
+	struct list* maplist = &thread_process()->maplist;
+	
+	while(!list_empty(maplist))
+	{
+		struct mapid* mid = list_entry(list_pop_front(maplist), struct mapid, elem);
+		free(mid);
+	}
+}
+
+struct mapid* 
+mmap_get(mapid_t mapid)
+{
+	struct list* maplist = &thread_process()->maplist;
+	struct list_elem* e;
+
+	for(e = list_begin(maplist); e != list_end(maplist); 
+			e = list_next(e))
+	{
+		struct mapid* mid = list_entry(e, struct mapid, elem);
+		if(mid->mapid == mapid)
+			return mid;
+	}
+	return NULL;
+}
+/* Project3 E */
