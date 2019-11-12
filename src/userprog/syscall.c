@@ -16,6 +16,7 @@
 #include "filesys/file.h"
 /* Project2 E */
 /* Project3 S */
+#include "userprog/mmap.h"
 #include "vm/page.h"
 /* Project3 E */
 
@@ -441,22 +442,12 @@ sys_close(int fd)
 /* Project2 E */
 
 /* Project3 S */
-struct mapid
-{
-	mapid_t mapid;
-	int fd;
-	void* addr;
-	struct list_elem elem;
-};
-
 static mapid_t 
 sys_mmap(int fd, void* addr)
 {
 	struct file* file;
 	size_t fsize;
 	off_t ofs;
-	struct mapid* mapid_data;
-	struct list* maplist = &thread_process()->maplist;
 	unsigned i;
 
 	/* Check fd validity */
@@ -466,15 +457,14 @@ sys_mmap(int fd, void* addr)
 	/* Check address validity: Non-null, page-aligned */
 	if(addr == NULL || pg_round_down(addr) != addr)
 		return -1;
-	
+
+	/* Get file from fd */	
 	if((file = fd_get_file(fd)) == NULL)
 		return -1;	
 	
-	/* Create spages for memory mapping */
 	lock_acquire(&filesys_lock);
 	fsize = file_length(file);
 	lock_release(&filesys_lock);
-	ofs = 0;
 
 	/* Check consecutive page vacancy */
 	for(i = 0; i < fsize; i += PGSIZE)
@@ -482,6 +472,7 @@ sys_mmap(int fd, void* addr)
 			return -1;
 	
 	/* Create supplemental page table */
+	ofs = 0;	
 	while(fsize > 0)
 	{
 		size_t page_read_bytes = fsize < PGSIZE ? fsize : PGSIZE;
@@ -496,49 +487,14 @@ sys_mmap(int fd, void* addr)
 	}
 
 	/* Create mapid structure */
-	mapid_data = malloc(sizeof(struct mapid));
-	mapid_data->mapid = list_empty(maplist) ? 3 : 
-									 		list_entry(list_back(maplist), struct mapid, elem)->mapid + 1;
-	mapid_data->fd = fd;
-	mapid_data->addr = addr;
-	list_push_back(maplist, &mapid_data->elem);
-
-	return mapid_data->mapid;
+	return mmap_allocate(fd, addr);
 }
 
 static void 
 sys_munmap(mapid_t mapping)
 {
-	struct mapid* mid = mmap_get(mapping);
-	list_remove(&mid->elem);
-	free(mid);
+	void* free_addr = mmap_remove(mapping);
+	spage_free(free_addr);
 }
 
-void 
-mmap_destroy(void)
-{
-	struct list* maplist = &thread_process()->maplist;
-	
-	while(!list_empty(maplist))
-	{
-		struct mapid* mid = list_entry(list_pop_front(maplist), struct mapid, elem);
-		free(mid);
-	}
-}
-
-struct mapid* 
-mmap_get(mapid_t mapid)
-{
-	struct list* maplist = &thread_process()->maplist;
-	struct list_elem* e;
-
-	for(e = list_begin(maplist); e != list_end(maplist); 
-			e = list_next(e))
-	{
-		struct mapid* mid = list_entry(e, struct mapid, elem);
-		if(mid->mapid == mapid)
-			return mid;
-	}
-	return NULL;
-}
 /* Project3 E */

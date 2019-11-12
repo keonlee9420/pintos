@@ -184,15 +184,13 @@ page_fault (struct intr_frame *f)
 		 corresponding supplemental page table */
 	spage = spage_lookup(pg_round_down(fault_addr));	
 
-	//printf("%p, fault: %p\n", f->esp, fault_addr);
-
 	/* Stack growth */
 	if(spage == NULL)
 	{
 		void* upage = pg_round_down(fault_addr);
 		uint8_t* kpage;
 		
-		if(pg_round_up(fault_addr) < f->esp)
+		if(fault_addr < f->esp - 32)
 			thread_exit();
 
 		spage_create(upage, NULL, 0, 0, false);
@@ -210,9 +208,7 @@ page_fault (struct intr_frame *f)
 
 	switch(spage->status)
 	{
-		case SPAGE_PRESENT:
-			thread_exit();
-		case SPAGE_UNLOADED:
+		case SPAGE_LOAD:
 		{
 			struct file* file;
 
@@ -229,7 +225,7 @@ page_fault (struct intr_frame *f)
 			}
 			break;
 		}
-		case SPAGE_SWAPOUT:
+		case SPAGE_SWAP:
 		{
 			void* upage = pg_round_down(fault_addr);
 			swap_in(upage);
@@ -239,6 +235,8 @@ page_fault (struct intr_frame *f)
 			if(!lazy_load(spage->mapfile, spage))
 				thread_exit();
 			break;
+		case SPAGE_STACK:
+			thread_exit();
 	}
 }
 
@@ -267,7 +265,6 @@ lazy_load(struct file* file, struct spage* spage)
 
 	load_end:
 		lock_release(&filesys_lock);
-		spage->status = SPAGE_PRESENT;
 		if(!success)
 			frame_free(kpage);
 		return success;

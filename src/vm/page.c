@@ -2,12 +2,13 @@
 #include <string.h>
 #include "threads/thread.h"
 #include "threads/malloc.h"
-#include "threads/pte.h"
+#include "userprog/pagedir.h"
 #include "vm/frame.h"
 
 /* Hash functions. */
 static unsigned hash_func (const struct hash_elem *p_, void *aux UNUSED);
-static bool hash_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+static bool hash_less (const struct hash_elem *a_, 
+											 const struct hash_elem *b_, void *aux UNUSED);
 static void spt_destructor(struct hash_elem* hash_elem, void* aux UNUSED);
 
 /* Initialize supplemental page table built by hash table. */
@@ -40,7 +41,7 @@ spage_create (void *upage, const char* filename, off_t ofs, size_t read_bytes, b
 		return NULL;
 
 	spage->upage = upage;
-	spage->status = SPAGE_UNLOADED;
+	spage->status = SPAGE_LOAD;
 	spage->offset = ofs;
 	spage->readbyte = read_bytes;
 	spage->writable = writable;
@@ -54,12 +55,11 @@ spage_create (void *upage, const char* filename, off_t ofs, size_t read_bytes, b
 
 /* Map virtual page to physical address entry PTE. */
 void 
-spage_map(void* upage, uint32_t* pte)
+spage_map(void* upage, void* kpage)
 {
 	struct spage* spage = spage_lookup(upage);
-	spage->pte = pte;
-	spage->status = SPAGE_PRESENT;
-	frame_map(upage, pte_get_page(*pte));
+	spage->kpage = kpage;
+	frame_map(upage, kpage);
 }
 
 /* Delete and free the supplemental page which is currently allocated for upage.
@@ -69,12 +69,19 @@ spage_free (void *upage)
 {
 	struct hash* spt = thread_current()->spt;
   struct spage *spage = spage_lookup (upage);
+	uint32_t* pd = thread_current()->pagedir;
 
 	if(spage == NULL)
 		return false;
 
-	/* Searches hash for an element equal to element. If one is found, it is removed from
-     hash and returned. Otherwise, a null pointer is returned and hash is unchanged. */
+	/* Unmap physical frame */
+	if(spage->kpage != NULL)
+	{
+		pagedir_clear_page(pd, upage);
+		frame_free(spage->kpage);
+	}
+
+	/* Delete from hash table */
 	hash_delete (spt, &spage->elem);
 	free (spage);
 	return true;
@@ -111,9 +118,19 @@ hash_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNU
   return a->upage < b->upage;
 }
 
+/* Free spage element */
 static void 
 spt_destructor(struct hash_elem* hash_elem, void* aux UNUSED)
 {
 	struct spage* spage = hash_entry(hash_elem, struct spage, elem);
+	uint32_t* pd = thread_current()->pagedir;
+	
+	/* Unmap physical frame */
+	if(spage->kpage != NULL)
+	{
+		pagedir_clear_page(pd, spage->upage);
+		frame_free(spage->kpage);
+	}
+
 	free(spage);
 }

@@ -27,8 +27,10 @@ swap_out(void)
 	void* kpage = frame->kpage;
 	uint32_t* pd = frame->user->pagedir;
 	struct spage* spage = spage_lookup(upage);
+
 	static block_sector_t next_sector = 0;
 	
+	printf("next sector: %d\n", next_sector);
 	/* If out page is dirty, swap out to disk */
 	if(pagedir_is_dirty(pd, upage))
 	{
@@ -37,7 +39,7 @@ swap_out(void)
 		int i;
 		lock_acquire(&block_lock);
 		spage->sector = next_sector;
-		spage->status = SPAGE_SWAPOUT;
+		spage->status = SPAGE_SWAP;
 		for(i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
 		{
 			const void* buf = upage + BLOCK_SECTOR_SIZE * i;
@@ -45,12 +47,7 @@ swap_out(void)
 		}
 		lock_release(&block_lock);
 	}
-	else
-	{
-		/* Set back to unloaded state if out page is not dirty */
-		spage->status = SPAGE_UNLOADED;
-	}
-	spage->pte = NULL;
+	spage->kpage = NULL;
 	pagedir_clear_page(pd, upage);
 
 	return kpage;

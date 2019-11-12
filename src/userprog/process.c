@@ -22,6 +22,7 @@
 #include "userprog/fd.h"
 /* Project2 E */
 /* Project3 S */
+#include "userprog/mmap.h"
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "vm/swap.h"

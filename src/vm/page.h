@@ -12,10 +12,10 @@
 /* Supplemental page table status */
 enum spage_state
 {
-	SPAGE_PRESENT, 
-	SPAGE_UNLOADED, 
-	SPAGE_SWAPOUT, 
-	SPAGE_MMAP
+	SPAGE_LOAD, 
+	SPAGE_SWAP, 
+	SPAGE_MMAP,
+	SPAGE_STACK
 };
 
 /* Supplemental page. */
@@ -26,19 +26,17 @@ struct spage
 	struct hash_elem elem;				/* Hash table element */
 
 	/* Present page */
-	uint32_t* pte;								/* Page table entry address */
+	void* kpage;									/* kpage: Pseudo-Physical page address */
 
-	/* Unloaded page */							
-	char filename[16];						/* Executable file name */
+	/* Load page & Memory-mapped file */							
+	char filename[16];						/* Executable file name : Load */
+	struct file* mapfile;					/* Memory-mapped file : MMap */
 	off_t offset;									/* File reading offset */
 	size_t readbyte;							/* File reading size */
 	bool writable;								/* Page writable condition */
 
 	/* Swapped-out page */
 	block_sector_t sector;				/* First sector of swapped-out disk */
-
-	/* Memory-mapping file */
-	struct file* mapfile;
 };
 
 /* Supplemental page table functions. */
@@ -49,7 +47,7 @@ void spt_destroy(void);
 bool spage_free (void *upage);
 struct spage* spage_create (void* upage, const char* file, 
 														off_t ofs, size_t read_bytes, bool writable);
-void spage_map(void* upage, uint32_t* pte);
+void spage_map(void* upage, void* kpage);
 void spage_swapout(void* upage);
 struct spage* spage_lookup(void* upage);
 
