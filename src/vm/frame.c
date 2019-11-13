@@ -2,6 +2,8 @@
 #include "threads/pte.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "vm/swap.h"
 
 /* Frame table list variables */
 static struct list frame_table;
@@ -22,7 +24,7 @@ frame_allocate (enum palloc_flags flags)
 	void* kpage = palloc_get_page(PAL_USER | flags);
 	
 	if(kpage == NULL)
-		return NULL;		//Need to implement swap here
+		kpage = swap_out();		//Need to implement swap here
 
 	/* Create mapped physical page */
   struct frame *frame = malloc(sizeof(struct frame));
@@ -41,9 +43,8 @@ frame_allocate (enum palloc_flags flags)
 void
 frame_free (void *kpage)
 {
-  struct frame *frame;
+  struct frame *frame = frame_lookup (kpage);
 
-  frame = frame_lookup (kpage);
   if (frame != NULL)
   {
     lock_acquire (&frame_table_lock);
@@ -89,22 +90,24 @@ frame_select_victim(void)
 struct frame *
 frame_lookup (void *kpage)
 {
-  struct frame *frame = NULL;
   struct list_elem *e;
+
+	ASSERT(pg_ofs(kpage) == 0);
 
   for (e = list_begin (&frame_table); e != list_end (&frame_table);
        e = list_next (e))
     {
-      frame = list_entry (e, struct frame, elem);
+      struct frame* frame = list_entry (e, struct frame, elem);
       if (frame->kpage == kpage)
         return frame;
     }
-  return frame;
+  return NULL;
 }
 
 void 
 frame_map(void* upage, void* kpage)
 {
+	ASSERT(pg_ofs(upage) == 0 && pg_ofs(kpage) == 0);
 	struct frame* frame = frame_lookup(kpage);
 	frame->upage = upage;
 	frame->user = thread_current();

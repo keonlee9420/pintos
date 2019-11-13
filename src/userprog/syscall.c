@@ -468,7 +468,7 @@ sys_mmap(int fd, void* addr)
 
 	/* Check consecutive page vacancy */
 	for(i = 0; i < fsize; i += PGSIZE)
-		if(spage_lookup(addr + i) != NULL)
+		if(spage_lookup(thread_current()->spt, addr + i) != NULL)
 			return -1;
 	
 	/* Create supplemental page table */

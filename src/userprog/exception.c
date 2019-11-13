@@ -182,7 +182,7 @@ page_fault (struct intr_frame *f)
 
 	/* User page fault: follow direction from 
 		 corresponding supplemental page table */
-	spage = spage_lookup(pg_round_down(fault_addr));	
+	spage = spage_lookup(thread_current()->spt, pg_round_down(fault_addr));	
 
 	/* Stack growth */
 	if(spage == NULL)
@@ -195,8 +195,6 @@ page_fault (struct intr_frame *f)
 
 		spage_create(upage, NULL, 0, 0, false);
 		kpage = frame_allocate(PAL_ZERO);
-		if(kpage == NULL)
-			kpage = swap_out();
 		
 		if(!process_install_page(upage, kpage, true))
 		{
@@ -250,8 +248,6 @@ lazy_load(struct file* file, struct spage* spage)
 		return false;
 		
 	kpage = frame_allocate(PAL_ZERO);
-	if(kpage == NULL)
-		kpage = swap_out();
 
 	lock_acquire(&filesys_lock);
 	file_seek(file, spage->offset);

@@ -541,10 +541,9 @@ setup_stack (void **esp)
 	/* Project3 S */
 	void* upage = (uint8_t*)PHYS_BASE - PGSIZE;
 
-	spage_create(upage, NULL, 0, 0, false);
+	spage_create(upage, NULL, 0, 0, true);
   kpage = frame_allocate(PAL_ZERO);
-	if(kpage == NULL)
-		kpage = swap_out();
+
 	success = process_install_page (upage, kpage, true);
   if (success)
     *esp = PHYS_BASE;

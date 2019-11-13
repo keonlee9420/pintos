@@ -1,9 +1,12 @@
 #include "vm/page.h"
+#include <debug.h>
 #include <string.h>
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "vm/frame.h"
+#include <stdio.h>
 
 /* Hash functions. */
 static unsigned hash_func (const struct hash_elem *p_, void *aux UNUSED);
@@ -41,6 +44,7 @@ spage_create (void *upage, const char* filename, off_t ofs, size_t read_bytes, b
 		return NULL;
 
 	spage->upage = upage;
+	spage->kpage = NULL;
 	spage->status = SPAGE_LOAD;
 	spage->offset = ofs;
 	spage->readbyte = read_bytes;
@@ -57,7 +61,11 @@ spage_create (void *upage, const char* filename, off_t ofs, size_t read_bytes, b
 void 
 spage_map(void* upage, void* kpage)
 {
-	struct spage* spage = spage_lookup(upage);
+	struct hash* spt = thread_current()->spt;
+	struct spage* spage = spage_lookup(spt, upage);
+	
+	ASSERT(pg_ofs(kpage) == 0);
+	
 	spage->kpage = kpage;
 	frame_map(upage, kpage);
 }
@@ -68,7 +76,7 @@ bool
 spage_free (void *upage)
 {
 	struct hash* spt = thread_current()->spt;
-  struct spage *spage = spage_lookup (upage);
+  struct spage *spage = spage_lookup (spt, upage);
 	uint32_t* pd = thread_current()->pagedir;
 
 	if(spage == NULL)
@@ -90,11 +98,12 @@ spage_free (void *upage)
 /* Returns the supplemental page containing the given virtual address,
    or a null pointer if no such page exists. */
 struct spage *
-spage_lookup (void *upage)
+spage_lookup (struct hash* spt, void *upage)
 {
   struct spage p;
   struct hash_elem *e;
-	struct hash* spt = thread_current()->spt;
+
+	ASSERT(pg_ofs(upage) == 0);
 
   p.upage = upage;
   e = hash_find (spt, &p.elem);
@@ -123,14 +132,5 @@ static void
 spt_destructor(struct hash_elem* hash_elem, void* aux UNUSED)
 {
 	struct spage* spage = hash_entry(hash_elem, struct spage, elem);
-	uint32_t* pd = thread_current()->pagedir;
-	
-	/* Unmap physical frame */
-	if(spage->kpage != NULL)
-	{
-		pagedir_clear_page(pd, spage->upage);
-		frame_free(spage->kpage);
-	}
-
 	free(spage);
 }

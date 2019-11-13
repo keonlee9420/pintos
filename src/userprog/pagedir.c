@@ -9,6 +9,7 @@
 #include "threads/thread.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include <stdio.h>
 /* Project3 E */
 
 static uint32_t *active_pd (void);
@@ -121,7 +122,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
 			/* Project3 S */
-			spage_map(upage, pte);
+			spage_map(upage, kpage);
 			/* Project3 E */
       return true;
     }

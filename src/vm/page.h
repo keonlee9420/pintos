@@ -49,6 +49,6 @@ struct spage* spage_create (void* upage, const char* file,
 														off_t ofs, size_t read_bytes, bool writable);
 void spage_map(void* upage, void* kpage);
 void spage_swapout(void* upage);
-struct spage* spage_lookup(void* upage);
+struct spage* spage_lookup(struct hash* spt, void* upage);
 
 #endif /* vm/page.h */
