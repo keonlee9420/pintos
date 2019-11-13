@@ -2,6 +2,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "userprog/process.h"
+#include "userprog/fd.h"
 
 mapid_t 
 mmap_allocate(int fd, void* addr)
@@ -24,11 +25,13 @@ mmap_remove(mapid_t mid)
 	void* addr;
 
 	if(map == NULL)
-		return NULL;;
+		return NULL;
 
+	/* Delete mmap structure */
 	addr = map->addr;
 	list_remove(&map->elem);
 	free(map);	
+
 	return addr;
 }
 
@@ -59,3 +62,4 @@ mmap_get(mapid_t mapid)
 	}
 	return NULL;
 }
+

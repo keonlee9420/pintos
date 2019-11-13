@@ -496,5 +496,4 @@ sys_munmap(mapid_t mapping)
 	void* free_addr = mmap_remove(mapping);
 	spage_free(free_addr);
 }
-
 /* Project3 E */
