@@ -18,7 +18,7 @@ swap_init(void)
 }
 
 /* Get victim frame and its kpage & mapped upage,  
-	 check dirty bit,  */
+	 check dirty bit, */
 void* 
 swap_out(void)
 {
@@ -31,8 +31,14 @@ swap_out(void)
 
 	static block_sector_t next_sector = 0;
 	
+	/* MMAP: Write back to file */
+	if(spage_victim->status == SPAGE_MMAP)
+		file_write_at(spage_victim->mapfile, kpage, 
+									spage_victim->readbyte, spage_victim->offset);
+
 	/* If out page is dirty, swap out to disk */
-	if(pagedir_is_dirty(pd_victim, upage_victim) || spage_victim->status == SPAGE_STACK)
+	else if(pagedir_is_dirty(pd_victim, upage_victim) || 
+					spage_victim->status == SPAGE_STACK)
 	{
 		/* Swap out */
 		struct block* block = block_get_role(BLOCK_SWAP);
@@ -47,6 +53,7 @@ swap_out(void)
 		}
 		lock_release(&block_lock);
 	}
+
 	spage_victim->kpage = NULL;
 	pagedir_clear_page(pd_victim, upage_victim);
 

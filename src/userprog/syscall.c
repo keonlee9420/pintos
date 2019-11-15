@@ -16,7 +16,9 @@
 #include "filesys/file.h"
 /* Project2 E */
 /* Project3 S */
+#include <hash.h>
 #include "userprog/mmap.h"
+#include "userprog/pagedir.h"
 #include "vm/page.h"
 /* Project3 E */
 
@@ -432,12 +434,12 @@ sys_close(int fd)
 {
 	struct file* file = fd_pop(fd);
 
-	if(file != NULL)
-	{				
-		lock_acquire(&filesys_lock);
-		file_close(file);
-		lock_release(&filesys_lock);
-	}
+	if(file == NULL)
+		return;
+
+	lock_acquire(&filesys_lock);
+	file_close(file);
+	lock_release(&filesys_lock);
 }
 /* Project2 E */
 
@@ -449,22 +451,24 @@ sys_mmap(int fd, void* addr)
 	size_t fsize;
 	off_t ofs;
 	unsigned i;
-
-	/* Check fd validity */
-	if(fd == STDOUT_FILENO || fd == STDIN_FILENO)
-		return -1;
+	void* upage = addr;
 
 	/* Check address validity: Non-null, page-aligned */
 	if(addr == NULL || pg_round_down(addr) != addr)
 		return -1;
 
-	/* Get file from fd */	
+	/* Get file from fd, checking fd validity */	
 	if((file = fd_get_file(fd)) == NULL)
 		return -1;	
 	
 	lock_acquire(&filesys_lock);
+	file = file_reopen(file);
 	fsize = file_length(file);
 	lock_release(&filesys_lock);
+
+	/* Return if mapping zero byte */
+	if(fsize == 0)
+		return -1;
 
 	/* Check consecutive page vacancy */
 	for(i = 0; i < fsize; i += PGSIZE)
@@ -472,28 +476,43 @@ sys_mmap(int fd, void* addr)
 			return -1;
 	
 	/* Create supplemental page table */
-	ofs = 0;	
+	ofs = 0;
 	while(fsize > 0)
 	{
 		size_t page_read_bytes = fsize < PGSIZE ? fsize : PGSIZE;
-		struct spage* spage = spage_create(addr, NULL, ofs, page_read_bytes, true);
+		struct spage* spage = spage_create(upage, NULL, ofs, page_read_bytes, true);
 		spage->status = SPAGE_MMAP;
 		spage->mapfile = file;
 
 		/* Advance */
 		ofs += page_read_bytes;
 		fsize -= page_read_bytes;
-		addr += PGSIZE;
+		upage += PGSIZE;
 	}
 
 	/* Create mapid structure */
-	return mmap_allocate(fd, addr);
+	return mmap_allocate(file, addr);
 }
 
 static void 
 sys_munmap(mapid_t mapping)
 {
-	void* free_addr = mmap_remove(mapping);
-	spage_free(free_addr);
+	struct mmap* map = mmap_get(mapping);
+
+	/* Return if no mapping with MAPPING */
+	if(map == NULL)
+		return;
+
+	/* Write back to file */
+	mmap_writeback(map->file, map->addr);
+
+	/* Close file */
+	lock_acquire(&filesys_lock);
+	file_close(map->file);
+	lock_release(&filesys_lock);
+
+	/* Remove mmap element */
+	list_remove(&map->elem);
+	free(map);
 }
 /* Project3 E */

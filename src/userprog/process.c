@@ -176,7 +176,26 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 	/* Project2 S */
-	struct process* proc;
+	struct process* proc = cur->process;
+	if(proc != NULL)
+	{
+		printf("%s: exit(%d)\n", thread_name(), proc->status);
+		/* Project3 S */
+		mmap_destroy();
+		/* Project3 E */
+		/* Collapse fd structs */
+		fd_collapse();
+		/* Mark as exited */
+		proc->isexited = true;
+		/* Signal to parent */
+		sema_up(&proc->sema);
+	}
+
+	/* Free holding golbal lock */
+	if(lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
+	if(lock_held_by_current_thread(&proclist_lock))
+		lock_release(&proclist_lock);
 	/* Project2 E */
 
   /* Destroy the current process's page directory and switch back
@@ -195,29 +214,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-	/* Project2 S */
-	/* Free holding golbal lock */
-	if(lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
-	if(lock_held_by_current_thread(&proclist_lock))
-		lock_release(&proclist_lock);
-
-	proc = cur->process;
-	if(proc != NULL)
-	{
-		printf("%s: exit(%d)\n", thread_name(), proc->status);
-		/* Collapse fd structs */
-		fd_collapse();
-		/* Project3 S */
-		mmap_destroy();
-		/* Project3 E */
-		/* Mark as exited */
-		proc->isexited = true;
-		/* Signal to parent */
-		sema_up(&proc->sema);
-	}
-	/* Project2 E */
 }
 
 /* Sets up the CPU for running user code in the current
