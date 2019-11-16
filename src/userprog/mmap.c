@@ -8,6 +8,7 @@
 #include "vm/page.h"
 #include <stdio.h>
 
+/* Create mmap element mapping FILE and ADDR */
 mapid_t 
 mmap_allocate(struct file* file, void* addr)
 {
@@ -22,6 +23,8 @@ mmap_allocate(struct file* file, void* addr)
 	return map->mapid;
 }
 
+/* Destroy all mapping information, 
+	 Close mapped file for all mmap */
 void 
 mmap_destroy(void)
 {
@@ -44,6 +47,7 @@ mmap_destroy(void)
 	}
 }
 
+/* Return mmap structure containing MAPID */
 struct mmap* 
 mmap_get(mapid_t mapid)
 {
@@ -60,6 +64,8 @@ mmap_get(mapid_t mapid)
 	return NULL;
 }
 
+/* Write back addr content into file. 
+	 Modify only updated page marked by dirty bit */
 void 
 mmap_writeback(struct file* file, void* addr)
 {

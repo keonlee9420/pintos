@@ -25,6 +25,7 @@ spt_create(void)
 	return spt;
 }
 
+/* Destroy all supplemental page table with its elements */
 void 
 spt_destroy(void)
 {

@@ -107,7 +107,6 @@ main (void)
   /* Project3 S */
 #ifdef VM
   frame_init ();
-	swap_init();
 #endif
   /* Project3 E */
 
@@ -143,6 +142,11 @@ main (void)
   locate_block_devices ();
   filesys_init (format_filesys);
 #endif
+/* Project3 S */
+#ifdef VM
+	swap_init();
+#endif
+/* Project3 E */
 
   printf ("Boot complete.\n");
   

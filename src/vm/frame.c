@@ -24,11 +24,10 @@ frame_allocate (enum palloc_flags flags)
 	void* kpage = palloc_get_page(PAL_USER | flags);
 	
 	if(kpage == NULL)
-		kpage = swap_out();		//Need to implement swap here
+		kpage = swap_out();
 
 	/* Create mapped physical page */
   struct frame *frame = malloc(sizeof(struct frame));
-
   frame->kpage = kpage;
 
 	/* Insert into frame list */
@@ -104,6 +103,7 @@ frame_lookup (void *kpage)
   return NULL;
 }
 
+/* Map UPAGE with KPAGE in frame table element */
 void 
 frame_map(void* upage, void* kpage)
 {

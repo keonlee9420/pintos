@@ -16,7 +16,6 @@
 #include "filesys/file.h"
 /* Project2 E */
 /* Project3 S */
-#include <hash.h>
 #include "userprog/mmap.h"
 #include "userprog/pagedir.h"
 #include "vm/page.h"
@@ -59,6 +58,7 @@ syscall_handler (struct intr_frame *f)
 {
 	int* esp = f->esp;
 	int syscall_number = read_stack(esp);
+	thread_current()->esp = esp;
 	switch(syscall_number)
 	{
 		case SYS_HALT:
@@ -158,6 +158,7 @@ syscall_handler (struct intr_frame *f)
 		default:
 			NOT_REACHED();
 	}
+	thread_current()->esp = NULL;
 }
 
 /* Reads a byte at user virtual address UADDR.

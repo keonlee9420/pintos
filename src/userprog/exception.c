@@ -189,8 +189,9 @@ page_fault (struct intr_frame *f)
 	{
 		void* upage = pg_round_down(fault_addr);
 		uint8_t* kpage;
+		void* esp = thread_current()->esp == NULL ? f->esp : thread_current()->esp;
 		
-		if(fault_addr < f->esp - 32)
+		if(fault_addr < esp - 32)
 			thread_exit();
 
 		spage_create(upage, NULL, 0, 0, false);
@@ -204,40 +205,49 @@ page_fault (struct intr_frame *f)
 		return;
 	}
 
+	/* Handle page fault according to page installation status */
 	switch(spage->status)
 	{
+		/* LOAD: Open file, read file, then map upage */
 		case SPAGE_LOAD:
 		{
 			struct file* file;
+			bool success;
 
 			lock_acquire(&filesys_lock);
 			file = filesys_open(spage->filename);
 			lock_release(&filesys_lock);
 
-			if(!lazy_load(file, spage))
-			{
-				lock_acquire(&filesys_lock);
-				file_close(file);
-				lock_release(&filesys_lock);
+			success = lazy_load(file, spage);
+
+			lock_acquire(&filesys_lock);
+			file_close(file);
+			lock_release(&filesys_lock);
+
+			if(!success)
 				thread_exit();
-			}
 			break;
 		}
+		/* SWAP: Swap back in */
 		case SPAGE_SWAP:
 		{
 			void* upage = pg_round_down(fault_addr);
 			swap_in(upage);
 			break;
 		}
+		/* MMAP: Read own file, map upage */
 		case SPAGE_MMAP:
 			if(!lazy_load(spage->mapfile, spage))
 				thread_exit();
 			break;
+		/* Stack: this should not happen */
 		case SPAGE_STACK:
-			thread_exit();
+			NOT_REACHED();
 	}
 }
 
+/* Read file data into kpage from saved offset, 
+	 then map upage with kpage */
 static bool 
 lazy_load(struct file* file, struct spage* spage)
 {
@@ -250,8 +260,8 @@ lazy_load(struct file* file, struct spage* spage)
 	kpage = frame_allocate(PAL_ZERO);
 
 	lock_acquire(&filesys_lock);
-	file_seek(file, spage->offset);
-	if(file_read(file, kpage, spage->readbyte) != (int) spage->readbyte)
+	if(file_read_at(file, kpage, spage->readbyte, spage->offset) != 
+		 (int) spage->readbyte)
 		goto load_end;
 			
 	if(!process_install_page(spage->upage, kpage, spage->writable))

@@ -108,6 +108,7 @@ struct thread
 		/* Project3 S */
 #ifdef VM
 		struct hash* spt;										/* Supplemental Page Table */
+		void* esp;													/* Saved esp for page fault */
 #endif
 		/* Project3 E */
 
