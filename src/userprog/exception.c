@@ -169,12 +169,13 @@ page_fault (struct intr_frame *f)
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
 	/* Kernel page fault: return -1 */
-	if(!user)
+	//printf("fault addr: %p, user: %d\n", fault_addr, user);
+	/*if(!user)
 	{
 		f->eip = (void*) f->eax;
 		f->eax = 0xffffffff;
 		return;
-	}
+	}*/
 	/* Project3 S */
 	/* Error out for outbounded access */
 	if(is_kernel_vaddr(fault_addr) || fault_addr == NULL)
@@ -192,7 +193,16 @@ page_fault (struct intr_frame *f)
 		void* esp = thread_current()->esp == NULL ? f->esp : thread_current()->esp;
 		
 		if(fault_addr < esp - 32)
-			thread_exit();
+		{
+			if(user)
+				thread_exit();
+			else
+			{
+				f->eip = (void*)f->eax;
+				f->eax = 0xffffffff;
+				return;
+			}
+		}
 
 		spage_create(upage, NULL, 0, 0, false);
 		kpage = frame_allocate(PAL_ZERO);
