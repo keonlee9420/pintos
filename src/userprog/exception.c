@@ -168,17 +168,13 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-	/* Kernel page fault: return -1 */
-	//printf("fault addr: %p, user: %d\n", fault_addr, user);
-	/*if(!user)
-	{
-		f->eip = (void*) f->eax;
-		f->eax = 0xffffffff;
-		return;
-	}*/
 	/* Project3 S */
 	/* Error out for outbounded access */
 	if(is_kernel_vaddr(fault_addr) || fault_addr == NULL)
+		thread_exit();
+
+	/* Terminate process if page fault is from write to read-only page */
+	if(!not_present)
 		thread_exit();
 
 	/* User page fault: follow direction from 
@@ -190,7 +186,8 @@ page_fault (struct intr_frame *f)
 	{
 		void* upage = pg_round_down(fault_addr);
 		uint8_t* kpage;
-		void* esp = thread_current()->esp == NULL ? f->esp : thread_current()->esp;
+		void* esp = thread_current()->esp == NULL ? 
+								f->esp : thread_current()->esp;
 		
 		if(fault_addr < esp - 32)
 		{
