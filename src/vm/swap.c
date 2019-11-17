@@ -1,5 +1,4 @@
 #include "vm/swap.h"
-#include <stdio.h>
 #include <bitmap.h>
 #include "threads/thread.h"
 #include "threads/synch.h"
@@ -8,7 +7,7 @@
 #include "userprog/pagedir.h"
 #include "vm/page.h"
 #include "vm/frame.h"
-#include "devices/block.h"
+#include <stdio.h>
 
 static struct lock block_lock;
 static struct bitmap* swap_bitmap;
@@ -36,12 +35,13 @@ swap_out(void)
 	
 	/* MMAP: Write back to file */
 	if(spage_victim->status == SPAGE_MMAP)
-		file_write_at(spage_victim->mapfile, kpage, 
+		file_write_at(spage_victim->file, kpage, 
 									spage_victim->readbyte, spage_victim->offset);
 
 	/* If out page is dirty, swap out to disk */
 	else if(pagedir_is_dirty(pd_victim, upage_victim) || 
-					spage_victim->status == SPAGE_STACK)
+					spage_victim->status == SPAGE_STACK || 
+					spage_victim->status == SPAGE_SWAP)
 	{
 		/* Swap out */
 		int i, block_cnt = PGSIZE / BLOCK_SECTOR_SIZE;
@@ -83,9 +83,12 @@ swap_in(void* upage)
 	int i, block_cnt = PGSIZE / BLOCK_SECTOR_SIZE;
 	uint8_t* kpage = frame_allocate(PAL_ZERO);
 
+	//ASSERT(bitmap_all(swap_bitmap, sector, block_cnt));
+
 	lock_acquire(&block_lock);
 	/* Mark consecutive sectors as freed */
 	bitmap_set_multiple(swap_bitmap, sector, block_cnt, false);
+	spage->sector = BITMAP_ERROR;
 
 	/* Read block content into kpage */
 	for(i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
@@ -101,5 +104,19 @@ swap_in(void* upage)
 		frame_free(kpage);
 		thread_exit();
 	}
+}
+
+void 
+swap_free(block_sector_t sector)
+{
+	int block_cnt = PGSIZE / BLOCK_SECTOR_SIZE;
+
+	/* Return if not recorded page in sector */
+	if(sector == BITMAP_ERROR)
+		return;
+
+	lock_acquire(&block_lock);
+	bitmap_set_multiple(swap_bitmap, sector, block_cnt, false);
+	lock_release(&block_lock);
 }
 

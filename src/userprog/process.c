@@ -175,8 +175,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+	struct file* file;
 	/* Project2 S */
 	struct process* proc = cur->process;
+
 	if(proc != NULL)
 	{
 		printf("%s: exit(%d)\n", thread_name(), proc->status);
@@ -197,6 +199,12 @@ process_exit (void)
 	if(lock_held_by_current_thread(&proclist_lock))
 		lock_release(&proclist_lock);
 	/* Project2 E */
+
+	/* Project3 S */
+	file = thread_current()->loadfile;
+	if(file != NULL)
+		file_close(file);
+	/* Project3 E */
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -297,7 +305,7 @@ struct Elf32_Phdr
 
 static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-static bool load_segment (const char *filename, off_t ofs, uint8_t *upage,
+static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
@@ -341,6 +349,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+	/* Project3 S */
+	thread_current()->loadfile = file;
+	/* Project3 E */
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -404,7 +415,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file_title, file_page, (void *) mem_page,
+              if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -424,8 +435,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
-  /* We arrive here whether the load is successful or not. */
-  file_close (file);
   /* Project2 S */
 	lock_release(&filesys_lock);
 	/* Project2 E */
@@ -494,7 +503,7 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool
-load_segment (const char* filename, off_t ofs, uint8_t *upage,
+load_segment (struct file* file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
 {
 	off_t offset;
@@ -513,7 +522,8 @@ load_segment (const char* filename, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 			size_t page_zero_bytes = PGSIZE - page_read_bytes;			
 
-			spage_create(upage, filename, offset, page_read_bytes, writable); 
+			spage_create(upage, SPAGE_LOAD, file, 
+									 offset, page_read_bytes, writable); 
 
       /* Advance. */
 			offset += page_read_bytes;
@@ -537,7 +547,7 @@ setup_stack (void **esp)
 	/* Project3 S */
 	void* upage = (uint8_t*)PHYS_BASE - PGSIZE;
 
-	spage_create(upage, NULL, 0, 0, true);
+	spage_create(upage, SPAGE_STACK, NULL, 0, 0, true);
   kpage = frame_allocate(PAL_ZERO);
 
 	success = process_install_page (upage, kpage, true);

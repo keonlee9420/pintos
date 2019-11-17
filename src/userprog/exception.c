@@ -191,6 +191,7 @@ page_fault (struct intr_frame *f)
 		
 		if(fault_addr < esp - 32)
 		{
+			//printf("fault addr: %p\n", fault_addr);
 			if(user)
 				thread_exit();
 			else
@@ -201,7 +202,7 @@ page_fault (struct intr_frame *f)
 			}
 		}
 
-		spage_create(upage, NULL, 0, 0, false);
+		spage_create(upage, SPAGE_STACK, NULL, 0, 0, true);
 		kpage = frame_allocate(PAL_ZERO);
 		
 		if(!process_install_page(upage, kpage, true))
@@ -217,24 +218,9 @@ page_fault (struct intr_frame *f)
 	{
 		/* LOAD: Open file, read file, then map upage */
 		case SPAGE_LOAD:
-		{
-			struct file* file;
-			bool success;
-
-			lock_acquire(&filesys_lock);
-			file = filesys_open(spage->filename);
-			lock_release(&filesys_lock);
-
-			success = lazy_load(file, spage);
-
-			lock_acquire(&filesys_lock);
-			file_close(file);
-			lock_release(&filesys_lock);
-
-			if(!success)
+			if(!lazy_load(spage->file, spage))
 				thread_exit();
 			break;
-		}
 		/* SWAP: Swap back in */
 		case SPAGE_SWAP:
 		{
@@ -244,7 +230,7 @@ page_fault (struct intr_frame *f)
 		}
 		/* MMAP: Read own file, map upage */
 		case SPAGE_MMAP:
-			if(!lazy_load(spage->mapfile, spage))
+			if(!lazy_load(spage->file, spage))
 				thread_exit();
 			break;
 		/* Stack: this should not happen */

@@ -29,8 +29,7 @@ struct spage
 	void* kpage;									/* kpage: Pseudo-Physical page address */
 
 	/* Load page & Memory-mapped file */							
-	char filename[16];						/* Executable file name : Load */
-	struct file* mapfile;					/* Memory-mapped file : MMap */
+	struct file* file;						/* File structure for load & mmap */
 	off_t offset;									/* File reading offset */
 	size_t readbyte;							/* File reading size */
 	bool writable;								/* Page writable condition */
@@ -45,7 +44,7 @@ void spt_destroy(void);
 
 /* Supplemental page table entry functions */
 bool spage_free (void *upage);
-struct spage* spage_create (void* upage, const char* file, 
+struct spage* spage_create (void* upage, int status, struct file* file, 
 														off_t ofs, size_t read_bytes, bool writable);
 void spage_map(void* upage, void* kpage);
 void spage_swapout(void* upage);

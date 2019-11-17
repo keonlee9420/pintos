@@ -1,12 +1,13 @@
 #include "vm/page.h"
 #include <debug.h>
 #include <string.h>
+#include <bitmap.h>
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "vm/frame.h"
-#include <stdio.h>
+#include "vm/swap.h"
 
 /* Hash functions. */
 static unsigned hash_func (const struct hash_elem *p_, void *aux UNUSED);
@@ -36,7 +37,8 @@ spt_destroy(void)
 
 /* Create supplemental page for upage. */
 struct spage*
-spage_create (void *upage, const char* filename, off_t ofs, size_t read_bytes, bool writable)
+spage_create (void *upage, int status, struct file* file, 
+							off_t ofs, size_t read_bytes, bool writable)
 {
 	struct hash* spt = thread_current()->spt;
   struct spage* spage = malloc(sizeof(struct spage));
@@ -46,12 +48,12 @@ spage_create (void *upage, const char* filename, off_t ofs, size_t read_bytes, b
 
 	spage->upage = upage;
 	spage->kpage = NULL;
-	spage->status = SPAGE_LOAD;
+	spage->status = status;
+	spage->file = file;
 	spage->offset = ofs;
 	spage->readbyte = read_bytes;
 	spage->writable = writable;
-	if(filename != NULL)
-		strlcpy(spage->filename, filename, 16);
+	spage->sector = BITMAP_ERROR;
 
   hash_insert (spt, &spage->elem);
 
@@ -89,6 +91,9 @@ spage_free (void *upage)
 		pagedir_clear_page(pd, upage);
 		frame_free(spage->kpage);
 	}
+	
+	/* Free swap disk sector encoded by spage */
+	swap_free(spage->sector);
 
 	/* Delete from hash table */
 	hash_delete (spt, &spage->elem);
@@ -133,5 +138,6 @@ static void
 spt_destructor(struct hash_elem* hash_elem, void* aux UNUSED)
 {
 	struct spage* spage = hash_entry(hash_elem, struct spage, elem);
+	swap_free(spage->sector);
 	free(spage);
 }

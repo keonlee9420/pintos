@@ -481,9 +481,9 @@ sys_mmap(int fd, void* addr)
 	while(fsize > 0)
 	{
 		size_t page_read_bytes = fsize < PGSIZE ? fsize : PGSIZE;
-		struct spage* spage = spage_create(upage, NULL, ofs, page_read_bytes, true);
-		spage->status = SPAGE_MMAP;
-		spage->mapfile = file;
+
+		spage_create(upage, SPAGE_MMAP, file, 
+								 ofs, page_read_bytes, true);
 
 		/* Advance */
 		ofs += page_read_bytes;

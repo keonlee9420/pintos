@@ -109,6 +109,7 @@ struct thread
 #ifdef VM
 		struct hash* spt;										/* Supplemental Page Table */
 		void* esp;													/* Saved esp for page fault */
+		struct file* loadfile;							/* Load file */
 #endif
 		/* Project3 E */
 
