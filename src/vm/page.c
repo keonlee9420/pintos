@@ -44,7 +44,7 @@ spage_create (void *upage, int status, struct file* file,
   struct spage* spage = malloc(sizeof(struct spage));
 
 	if(spage == NULL)
-		return NULL;
+		thread_exit();
 
 	spage->upage = upage;
 	spage->kpage = NULL;

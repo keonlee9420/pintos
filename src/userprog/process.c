@@ -203,7 +203,11 @@ process_exit (void)
 	/* Project3 S */
 	file = thread_current()->loadfile;
 	if(file != NULL)
+	{
+		lock_acquire(&filesys_lock);
 		file_close(file);
+		lock_release(&filesys_lock);
+	}
 	/* Project3 E */
 
   /* Destroy the current process's page directory and switch back

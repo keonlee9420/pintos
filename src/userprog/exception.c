@@ -216,8 +216,9 @@ page_fault (struct intr_frame *f)
 	/* Handle page fault according to page installation status */
 	switch(spage->status)
 	{
-		/* LOAD: Open file, read file, then map upage */
+		/* LOAD, MMAP: Read file, then map upage */
 		case SPAGE_LOAD:
+		case SPAGE_MMAP:
 			if(!lazy_load(spage->file, spage))
 				thread_exit();
 			break;
@@ -228,11 +229,6 @@ page_fault (struct intr_frame *f)
 			swap_in(upage);
 			break;
 		}
-		/* MMAP: Read own file, map upage */
-		case SPAGE_MMAP:
-			if(!lazy_load(spage->file, spage))
-				thread_exit();
-			break;
 		/* Stack: this should not happen */
 		case SPAGE_STACK:
 			NOT_REACHED();

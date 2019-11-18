@@ -93,13 +93,18 @@ frame_lookup (void *kpage)
 
 	ASSERT(pg_ofs(kpage) == 0);
 
+	lock_acquire(&frame_table_lock);
   for (e = list_begin (&frame_table); e != list_end (&frame_table);
        e = list_next (e))
     {
       struct frame* frame = list_entry (e, struct frame, elem);
       if (frame->kpage == kpage)
+			{
+				lock_release(&frame_table_lock);
         return frame;
+			}
     }
+	lock_release(&frame_table_lock);
   return NULL;
 }
 
@@ -107,8 +112,11 @@ frame_lookup (void *kpage)
 void 
 frame_map(void* upage, void* kpage)
 {
+	struct frame* frame;
+	
 	ASSERT(pg_ofs(upage) == 0 && pg_ofs(kpage) == 0);
-	struct frame* frame = frame_lookup(kpage);
+
+	frame = frame_lookup(kpage);
 	frame->upage = upage;
 	frame->user = thread_current();
 }

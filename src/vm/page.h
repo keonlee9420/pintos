@@ -13,8 +13,8 @@
 enum spage_state
 {
 	SPAGE_LOAD, 
-	SPAGE_SWAP, 
 	SPAGE_MMAP,
+	SPAGE_SWAP, 
 	SPAGE_STACK
 };
 
