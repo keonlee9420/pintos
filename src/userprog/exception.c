@@ -15,7 +15,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 
-static struct lock pf_lock;
+static struct lock load_lock;
 /* Project3 E */
 
 /* Number of page faults processed. */
@@ -72,7 +72,9 @@ exception_init (void)
      fault address is stored in CR2 and needs to be preserved. */
   intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
 
-	lock_init(&pf_lock);
+	/* Project3 S */
+	lock_init(&load_lock);
+	/* Project3 E */
 }
 
 /* Prints exception statistics. */
@@ -193,7 +195,10 @@ page_fault (struct intr_frame *f)
 		uint8_t* kpage;
 		void* esp = thread_current()->esp == NULL ? 
 								f->esp : thread_current()->esp;
-		
+	
+		/* Validate stack growth availability 
+			 Allow stack growth if fault address is over esp-32, 
+			 considering PUSHA */
 		if(fault_addr < esp - 32)
 		{
 			if(user)
@@ -206,22 +211,23 @@ page_fault (struct intr_frame *f)
 			}
 		}
 
-		lock_acquire(&pf_lock);
+		/* Create new stack page, then map */
+		lock_acquire(&load_lock);
 		spage_create(upage, SPAGE_STACK, NULL, 0, 0, true);
 		kpage = frame_allocate(PAL_ZERO);
 		
 		if(!process_install_page(upage, kpage, true))
 		{
 			frame_free(kpage);
-			lock_release(&pf_lock);
+			lock_release(&load_lock);
 			thread_exit();
 		}
-		lock_release(&pf_lock);
+		lock_release(&load_lock);
 		return;
 	}
 
-	lock_acquire(&pf_lock);
 	/* Handle page fault according to page installation status */
+	lock_acquire(&load_lock);
 	switch(spage->status)
 	{
 		/* LOAD, MMAP: Read file, then map upage */
@@ -229,7 +235,7 @@ page_fault (struct intr_frame *f)
 		case SPAGE_MMAP:
 			if(!lazy_load(spage))
 			{
-				lock_release(&pf_lock);
+				lock_release(&load_lock);
 				thread_exit();
 			}
 			break;
@@ -244,7 +250,7 @@ page_fault (struct intr_frame *f)
 		case SPAGE_STACK:
 			NOT_REACHED();
 	}
-	lock_release(&pf_lock);
+	lock_release(&load_lock);
 }
 
 /* Read file data into kpage from saved offset, 

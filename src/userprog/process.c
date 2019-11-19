@@ -41,6 +41,7 @@ static struct process* find_process(pid_t child_pid);
 static struct list proc_list;
 static struct lock proclist_lock;
 
+/* Synchronization object */
 struct lock filesys_lock;
 
 /* Initialize process system */
@@ -179,18 +180,12 @@ process_exit (void)
 	/* Project2 S */
 	struct process* proc = cur->process;
 
-	/* Free holding golbal lock */
-	/*if(lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
-	if(lock_held_by_current_thread(&proclist_lock))
-		lock_release(&proclist_lock);*/
-	/* Project2 E */
-
 	/* Project3 S */
 	/* Free mmap resource */
 	if(proc != NULL)
 		mmap_destroy();
 
+	/* Close Load file for execution */
 	file = thread_current()->loadfile;
 	if(file != NULL)
 	{
@@ -331,11 +326,15 @@ load (const char *file_name, void (**eip) (void), void **esp)
 	char file_title[16];
 
 	parse_title(file_title, file_name);
+
+  lock_acquire(&filesys_lock);
 	/* Project2 E */
 
 	/* Project3 S */
 	/* Allocate supplemental page table */
 	t->spt = spt_create();
+	if(t->spt == NULL)
+		goto done;
 	/* Project3 E */
 
   /* Allocate and activate page directory. */
@@ -346,7 +345,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
 	/* Project2 S */
-  lock_acquire(&filesys_lock);
 	file = filesys_open (file_title);
 	/* Project2 E */
 	/* Project3 S */
@@ -526,7 +524,9 @@ load_segment (struct file* file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 			size_t page_zero_bytes = PGSIZE - page_read_bytes;			
-
+			
+			/* Create supplemental page table containing upage 
+				 Store information needed for later loading */
 			spage_create(upage, SPAGE_LOAD, file, 
 									 offset, page_read_bytes, writable); 
 
@@ -552,6 +552,7 @@ setup_stack (void **esp)
 	/* Project3 S */
 	void* upage = PHYS_BASE - PGSIZE;
 
+	/* Create UPAGE information, then map to frame */
 	spage_create(upage, SPAGE_STACK, NULL, 0, 0, true);
   kpage = frame_allocate(PAL_ZERO);
 
@@ -650,8 +651,11 @@ create_child(tid_t child_tid)
 	p->isexited = false;
 	p->status = -1;
 	list_init(&p->filelist);
-	list_init(&p->maplist);
 	sema_init(&p->sema, 0);
+
+	/* Project3 S */
+	list_init(&p->maplist);
+	/* Project3 E */
 
 	lock_acquire(&proclist_lock);
 	list_push_front(&proc_list, &p->elem);
