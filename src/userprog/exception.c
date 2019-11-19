@@ -7,12 +7,15 @@
 /* Project3 S */
 #include "threads/vaddr.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 #include "userprog/process.h"
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "vm/swap.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+
+static struct lock pf_lock;
 /* Project3 E */
 
 /* Number of page faults processed. */
@@ -68,6 +71,8 @@ exception_init (void)
      We need to disable interrupts for page faults because the
      fault address is stored in CR2 and needs to be preserved. */
   intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
+
+	lock_init(&pf_lock);
 }
 
 /* Prints exception statistics. */
@@ -119,7 +124,7 @@ kill (struct intr_frame *f)
 }
 
 /* Project3 S */
-static bool lazy_load(struct file* file, struct spage* spage);
+static bool lazy_load(struct spage* spage);
 /* Project3 E */
 
 /* Page fault handler.  This is a skeleton that must be filled in
@@ -191,7 +196,6 @@ page_fault (struct intr_frame *f)
 		
 		if(fault_addr < esp - 32)
 		{
-			//printf("fault addr: %p\n", fault_addr);
 			if(user)
 				thread_exit();
 			else
@@ -202,25 +206,32 @@ page_fault (struct intr_frame *f)
 			}
 		}
 
+		lock_acquire(&pf_lock);
 		spage_create(upage, SPAGE_STACK, NULL, 0, 0, true);
 		kpage = frame_allocate(PAL_ZERO);
 		
 		if(!process_install_page(upage, kpage, true))
 		{
 			frame_free(kpage);
+			lock_release(&pf_lock);
 			thread_exit();
 		}
+		lock_release(&pf_lock);
 		return;
 	}
 
+	lock_acquire(&pf_lock);
 	/* Handle page fault according to page installation status */
 	switch(spage->status)
 	{
 		/* LOAD, MMAP: Read file, then map upage */
 		case SPAGE_LOAD:
 		case SPAGE_MMAP:
-			if(!lazy_load(spage->file, spage))
+			if(!lazy_load(spage))
+			{
+				lock_release(&pf_lock);
 				thread_exit();
+			}
 			break;
 		/* SWAP: Swap back in */
 		case SPAGE_SWAP:
@@ -233,15 +244,17 @@ page_fault (struct intr_frame *f)
 		case SPAGE_STACK:
 			NOT_REACHED();
 	}
+	lock_release(&pf_lock);
 }
 
 /* Read file data into kpage from saved offset, 
 	 then map upage with kpage */
 static bool 
-lazy_load(struct file* file, struct spage* spage)
+lazy_load(struct spage* spage)
 {
 	uint8_t* kpage;
 	bool success = false;
+	struct file* file = spage->file;
 
 	if(file == NULL)
 		return false;

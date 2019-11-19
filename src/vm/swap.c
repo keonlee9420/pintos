@@ -1,4 +1,5 @@
 #include "vm/swap.h"
+#include <string.h>
 #include <bitmap.h>
 #include "threads/thread.h"
 #include "threads/synch.h"
@@ -63,6 +64,7 @@ swap_out(void)
 		/* Set victim spage status as swapped out */
 		spage_victim->sector = write_sector;
 		spage_victim->status = SPAGE_SWAP;
+		spage_victim->swapstat = true;
 		
 		/* Write data into swap disk */
 		for(i = 0; i < block_cnt; i++)
@@ -73,8 +75,16 @@ swap_out(void)
 		lock_release(&swap_lock);
 	}
 
+	/* Delete frame information in victim */
 	spage_victim->kpage = NULL;
 	pagedir_clear_page(pd_victim, upage_victim);
+
+	/* Delete frame mapping information */
+	frame->upage = NULL;
+	frame->user = NULL;
+
+	/* Set zero to entire frame */
+	memset(kpage, 0, PGSIZE);
 
 	return kpage;
 }
@@ -87,11 +97,12 @@ swap_in(void* upage)
 	int i, block_cnt = PGSIZE / BLOCK_SECTOR_SIZE;
 	uint8_t* kpage = frame_allocate(PAL_ZERO);
 
-	lock_acquire(&swap_lock);
+	ASSERT(spage->swapstat);
 	ASSERT(bitmap_all(swap_bitmap, sector, block_cnt));
+
+	lock_acquire(&swap_lock);
 	/* Mark consecutive sectors as freed */
 	bitmap_set_multiple(swap_bitmap, sector, block_cnt, false);
-	spage->sector = BITMAP_ERROR;
 
 	/* Read block content into kpage */
 	for(i = 0; i < block_cnt; i++)
@@ -100,6 +111,8 @@ swap_in(void* upage)
 		block_read(swap_block, sector + i, buf);
 	}	
 	lock_release(&swap_lock);
+
+	spage->swapstat = false;
 
 	/* Map upage with kpage */
 	if(!process_install_page(upage, kpage, spage->writable))
@@ -114,11 +127,8 @@ swap_free(block_sector_t sector)
 {
 	int block_cnt = PGSIZE / BLOCK_SECTOR_SIZE;
 
-	/* Return if not recorded page in sector */
-	if(sector == BITMAP_ERROR)
-		return;
-
 	lock_acquire(&swap_lock);
+	ASSERT(bitmap_all(swap_bitmap, sector, block_cnt));
 	bitmap_set_multiple(swap_bitmap, sector, block_cnt, false);
 	lock_release(&swap_lock);
 }

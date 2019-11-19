@@ -36,6 +36,7 @@ struct spage
 
 	/* Swapped-out page */
 	block_sector_t sector;				/* First sector of swapped-out disk */
+	bool swapstat;								/* Current swap-out status */
 };
 
 /* Supplemental page table functions. */

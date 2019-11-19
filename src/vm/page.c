@@ -32,7 +32,11 @@ spt_destroy(void)
 {
 	struct hash* spt = thread_current()->spt;
 
+	/* Delete entire element of hash table */
 	hash_destroy(spt, spt_destructor);
+
+	/* Delete hash table */
+	free(spt);
 }
 
 /* Create supplemental page for upage. */
@@ -46,6 +50,8 @@ spage_create (void *upage, int status, struct file* file,
 	if(spage == NULL)
 		thread_exit();
 
+	ASSERT(spage_lookup(spt, upage) == NULL);
+
 	spage->upage = upage;
 	spage->kpage = NULL;
 	spage->status = status;
@@ -53,7 +59,7 @@ spage_create (void *upage, int status, struct file* file,
 	spage->offset = ofs;
 	spage->readbyte = read_bytes;
 	spage->writable = writable;
-	spage->sector = BITMAP_ERROR;
+	spage->swapstat = false;
 
   hash_insert (spt, &spage->elem);
 
@@ -93,7 +99,8 @@ spage_free (void *upage)
 	}
 	
 	/* Free swap disk sector encoded by spage */
-	swap_free(spage->sector);
+	if(spage->swapstat)
+		swap_free(spage->sector);
 
 	/* Delete from hash table */
 	hash_delete (spt, &spage->elem);
@@ -138,6 +145,7 @@ static void
 spt_destructor(struct hash_elem* hash_elem, void* aux UNUSED)
 {
 	struct spage* spage = hash_entry(hash_elem, struct spage, elem);
-	swap_free(spage->sector);
+	if(spage->swapstat)
+		swap_free(spage->sector);
 	free(spage);
 }

@@ -1,4 +1,5 @@
 #include "vm/frame.h"
+#include <debug.h>
 #include "threads/pte.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
@@ -24,7 +25,9 @@ frame_allocate (enum palloc_flags flags)
 	void* kpage = palloc_get_page(PAL_USER | flags);
 	
 	if(kpage == NULL)
-		kpage = swap_out();
+		return swap_out();
+
+	ASSERT(frame_lookup(kpage) == NULL);
 
 	/* Create mapped physical page */
   struct frame *frame = malloc(sizeof(struct frame));
@@ -79,6 +82,7 @@ frame_select_victim(void)
 	
 	lock_acquire(&frame_table_lock);
 	frame = list_entry(list_pop_front(&frame_table), struct frame, elem);
+	list_push_back(&frame_table, &frame->elem);
 	lock_release(&frame_table_lock);
 	
 	return frame;

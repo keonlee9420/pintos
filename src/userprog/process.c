@@ -179,28 +179,18 @@ process_exit (void)
 	/* Project2 S */
 	struct process* proc = cur->process;
 
-	if(proc != NULL)
-	{
-		printf("%s: exit(%d)\n", thread_name(), proc->status);
-		/* Project3 S */
-		mmap_destroy();
-		/* Project3 E */
-		/* Collapse fd structs */
-		fd_collapse();
-		/* Mark as exited */
-		proc->isexited = true;
-		/* Signal to parent */
-		sema_up(&proc->sema);
-	}
-
 	/* Free holding golbal lock */
-	if(lock_held_by_current_thread(&filesys_lock))
+	/*if(lock_held_by_current_thread(&filesys_lock))
 		lock_release(&filesys_lock);
 	if(lock_held_by_current_thread(&proclist_lock))
-		lock_release(&proclist_lock);
+		lock_release(&proclist_lock);*/
 	/* Project2 E */
 
 	/* Project3 S */
+	/* Free mmap resource */
+	if(proc != NULL)
+		mmap_destroy();
+
 	file = thread_current()->loadfile;
 	if(file != NULL)
 	{
@@ -226,6 +216,17 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+	if(proc != NULL)
+	{
+		printf("%s: exit(%d)\n", thread_name(), proc->status);
+		/* Collapse fd structs */
+		fd_collapse();
+		/* Mark as exited */
+		proc->isexited = true;
+		/* Signal to parent */
+		sema_up(&proc->sema);
+	}
 }
 
 /* Sets up the CPU for running user code in the current
@@ -332,30 +333,30 @@ load (const char *file_name, void (**eip) (void), void **esp)
 	parse_title(file_title, file_name);
 	/* Project2 E */
 
+	/* Project3 S */
+	/* Allocate supplemental page table */
+	t->spt = spt_create();
+	/* Project3 E */
+
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
 
-	/* Project3 S */
-	/* Allocate supplemental page table */
-	t->spt = spt_create();
-	/* Project3 E */
-
   /* Open executable file. */
 	/* Project2 S */
   lock_acquire(&filesys_lock);
 	file = filesys_open (file_title);
 	/* Project2 E */
+	/* Project3 S */
+	thread_current()->loadfile = file;
+	/* Project3 E */
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-	/* Project3 S */
-	thread_current()->loadfile = file;
-	/* Project3 E */
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -549,7 +550,7 @@ setup_stack (void **esp)
   bool success = false;
 
 	/* Project3 S */
-	void* upage = (uint8_t*)PHYS_BASE - PGSIZE;
+	void* upage = PHYS_BASE - PGSIZE;
 
 	spage_create(upage, SPAGE_STACK, NULL, 0, 0, true);
   kpage = frame_allocate(PAL_ZERO);

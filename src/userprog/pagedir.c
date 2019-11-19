@@ -9,7 +9,6 @@
 #include "threads/thread.h"
 #include "vm/frame.h"
 #include "vm/page.h"
-#include <stdio.h>
 /* Project3 E */
 
 static uint32_t *active_pd (void);
