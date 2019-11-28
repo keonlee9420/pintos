@@ -21,7 +21,8 @@ struct buffer_cache
     struct list_elem elem;    /* List element */
 };
 
-void buffer_cache_init ();
-struct buffer_cache* look_up_cache (block_sector_t sector);
+void buffer_cache_init (void);
+void cache_read (block_sector_t sector, uint8_t* buffer, size_t size);
+void cache_write (block_sector_t sector, const uint8_t* buffer, size_t size);
 
 #endif /* filesys/cache.h */

@@ -1,6 +1,8 @@
 #include "filesys/cache.h"
 #include "filesys/filesys.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 #include <bitmap.h>
 #include <string.h>
 
@@ -8,15 +10,14 @@ struct list buffer_cache_list;    /* List for buffer cache element */
 void* cache_zone;                 /* Start point of buffer cache in physical memory */
 struct bitmap* cache_bmap;        /* Bitmap structure for buffer cache management */
 
-/* Individual locks for each cache slot */
-static struct lock cache_system_lock;
-static struct lock cache_locks[MAX_BUFFER_CACHE_IN_BSSIZE];
+static struct lock cache_system_lock;   /* Lock for handling new caching */
+static struct lock cache_locks[MAX_BUFFER_CACHE_IN_BSSIZE];   /* Individual locks for each cache slot */
 
-static unsigned get_free_buffer ();
-static void* get_physical_addr (unsigned offset);
+static void* get_cache_zone (unsigned offset);
 static void setup_cache (struct buffer_cache* bc, block_sector_t sector, unsigned offset);
-static struct buffer_cache* caching (block_sector_t sector);
 static struct buffer_cache* evict (block_sector_t sector);
+static struct buffer_cache* caching (block_sector_t sector);
+static struct buffer_cache* look_up_cache (block_sector_t sector);
 
 /* Initiate buffer cache */
 void
@@ -33,16 +34,9 @@ buffer_cache_init ()
   }
 }
 
-/* Get free buffer and return offset */
-static unsigned
-get_free_buffer ()
-{
-  return bitmap_scan_and_flip (cache_bmap, 0, 1, true);
-}
-
 /* Return actual(physical) address of buffer cache */
 static void*
-get_physical_addr (unsigned offset)
+get_cache_zone (unsigned offset)
 {
   return (void*) (cache_zone + (BLOCK_SECTOR_SIZE * offset));
 }
@@ -56,7 +50,7 @@ setup_cache (struct buffer_cache* bc, block_sector_t sector, unsigned offset)
   bc->dirty_bit = false;
   bc->ref_bit = true;
 
-  block_read (fs_device, sector, get_physical_addr(bc->offset));
+  block_read (fs_device, sector, get_cache_zone(bc->offset));
 }
 
 /* Select victim cache and return it after reset with new sector data.
@@ -67,10 +61,12 @@ evict (block_sector_t sector)
   struct list_elem* e = list_begin (&buffer_cache_list);
   struct buffer_cache* bc = NULL;
 
+  /* Iterate on each elemt unless we find proper victim */
   while (true)
   {
     bc = list_entry (e, struct buffer_cache, elem);
 
+    /* If the buffer cache is recently accessed, then move on to the next cache */
     if (bc->ref_bit)
     {
       bc->ref_bit = false;
@@ -78,9 +74,9 @@ evict (block_sector_t sector)
       continue;
     }
 
-    /* write-behind */
+    /* Write behind */
     if (bc->dirty_bit)
-      block_write (fs_device, bc->sector, get_physical_addr(bc->offset));
+      block_write (fs_device, bc->sector, get_cache_zone(bc->offset));
 
     /* Setup victim cache with new sector data */
     setup_cache (bc, sector, bc->offset);
@@ -96,14 +92,15 @@ static struct buffer_cache*
 caching (block_sector_t sector)
 {
   struct buffer_cache* bc;
-  bool isFull = bitmap_all (&cache_bmap, 0, bitmap_size (cache_bmap));
+  bool isFull = bitmap_all ((const struct bitmap*)cache_bmap, 0, bitmap_size (cache_bmap));
 
   if (isFull)
-    bc = evict (sector);
+    bc = evict (sector);  /* If there is no more cache slot, then evicting. */
   else
   {
+    /* If we can allocate cache slot, then make new cache. */
     bc = malloc (BLOCK_SECTOR_SIZE);
-    setup_cache (bc, sector, get_free_buffer ());
+    setup_cache (bc, sector, bitmap_scan_and_flip (cache_bmap, 0, 1, true));
     list_push_back (&buffer_cache_list, &bc->elem);
   }
 
@@ -113,12 +110,13 @@ caching (block_sector_t sector)
 /* Find cache with sector data.
     Cache new sector data if there is no previous one. 
     Return the found/new cache. */
-struct buffer_cache*
+static struct buffer_cache*
 look_up_cache (block_sector_t sector)
 {
   struct list_elem* e;
   struct buffer_cache* bc = NULL;
 
+  /* Find cache with sector data */
   for (e = list_begin (&buffer_cache_list); e != list_end (&buffer_cache_list);
       e = list_next (e))
   {
@@ -136,4 +134,37 @@ look_up_cache (block_sector_t sector)
   }
 
   return bc;
+}
+
+/* Read from cache with sector data. */
+void
+cache_read (block_sector_t sector, uint8_t* buffer, size_t size)
+{
+  struct buffer_cache* bc;
+  bc = look_up_cache (sector);
+  
+  /* Read cache into buffer */
+  memcpy(buffer, get_cache_zone(bc->offset), size);
+
+  /* Mark referenced */
+  if (!bc->ref_bit) 
+    bc->ref_bit = true;
+}
+
+/* Write on cache with sector data. */
+void
+cache_write (block_sector_t sector, const uint8_t* buffer, size_t size)
+{
+  struct buffer_cache* bc;
+  bc = look_up_cache (sector);
+
+  lock_acquire (&cache_locks[bc->offset]);
+
+  /* Write buffer into cache */
+  memcpy(get_cache_zone(bc->offset), buffer, size);
+
+  /* Mark dirty */
+  bc->dirty_bit = true;
+
+  lock_release (&cache_locks[bc->offset]);
 }
