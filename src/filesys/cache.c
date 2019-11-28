@@ -1,4 +1,5 @@
 #include "filesys/cache.h"
+#include <string.h>
 #include <bitmap.h>
 #include "threads/palloc.h"
 #include "threads/malloc.h"
@@ -12,7 +13,7 @@ static struct lock cache_lock;
 
 #define MAX_CACHE_SIZE 64
 
-static struct cache* get_empty_cache(void);
+static struct cache* allocate_cache(block_sector_t sector);
 static struct cache* scan_cache(block_sector_t sector);
 
 void 
@@ -31,35 +32,56 @@ bufpos_to_addr(size_t bufpos)
 	return (void*) (buffer_cache + (BLOCK_SECTOR_SIZE * bufpos));
 }
 
-/* Try to read SECTOR in cache into BUFFER. 
+/* Try to read SECTOR in cache into BUFFER by SIZE. 
 	 If not exists, cache SECTOR into buffer cache then read */
 void 
-cache_read(block_sector_t sector, uint8_t* buffer)
+cache_read(block_sector_t sector, uint8_t* buffer, size_t size)
 {
 	struct cache* cache;
 
 	lock_acquire(&cache_lock);
-	
+
+	/* Get buffer cache metadata */
+	cache = scan_cache(sector);
+	if(cache == NULL)
+		cache = get_empty_cache(sector);
+
+	/* Read from buffer cache into BUFFER */
+	memcpy(buffer, bufpos_to_addr(cache->bufpos), size);
+
 	lock_release(&cache_lock);
 }
 
-/* Try to write to SECTOR in cache from BUFFER. 
+/* Try to write to SECTOR in cache from BUFFER by SIZE. 
 	 If not exists, cache SECTOR into buffer cache then write */
 void 
-cache_write(block_sector_t sector, const uint8_t* buffer)
+cache_write(block_sector_t sector, const uint8_t* buffer, size_t size)
 {
+	struct cache* cache;
+
 	lock_acquire(&cache_lock);
+
+	/* Get buffer cache metadata */
+	cache = scan_cache(sector);
+	if(cache == NULL)
+		cache = get_empty_cache(sector);
+
+	/* Write BUFFER data into buffer cache */
+	memcpy(bufpos_to_addr(cache->bufpos), buffer, size);	
+	
+	/* Mark as dirty */
+	cache->dirty = true;
 
 	lock_release(&cache_lock);
 }
-
 
 static struct cache* evict_cache(void);
 
 /* Scan cache to search empty space.
-	 Evict if cache is full, then allocate cache */
+	 Evict if cache is full, then allocate cache
+	 Write sector data into buffer cache at the end */
 static struct cache* 
-get_empty_cache(void)
+allocate_cache(block_sector_t sector)
 {
 	struct cache* cache;
 	size_t cache_pos;	
@@ -77,6 +99,8 @@ get_empty_cache(void)
 		cache->bufpos = cache_pos;
 	}
 	cache->dirty = false;
+	cache->sector = sector;
+	block_read(fs_device, sector, bufpos_to_addr(cache->bufpos));
 	list_push_back(&cache_list, &cache->elem);
 
 	return cache;

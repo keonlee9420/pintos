@@ -13,6 +13,8 @@ struct cache
 };
 
 void cache_init(void);
-void cache_get_empty(void);
+
+void cache_read(block_sector_t sector, uint8_t* buffer, size_t size);
+void cache_write(block_sector_t sector, const uint8_t* buffer, size_t size);
 
 #endif /* filesys/cache.h */

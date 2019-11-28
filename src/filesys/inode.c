@@ -6,6 +6,9 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+/* Project4 S */
+#include "filesys/cache.h"
+/* Project4 E */
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
