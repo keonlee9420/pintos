@@ -36,9 +36,6 @@
 #include "devices/ide.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
-/* Project4 S */
-#include "filesys/cache.h"
-/* Project4 E */
 #endif
 /* Project3 S */
 #ifdef VM
@@ -144,9 +141,6 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
-	/* Project4 S */
-	cache_init();
-	/* Project4 E */
 #endif
 /* Project3 S */
 #ifdef VM

@@ -3,10 +3,13 @@
 #include <bitmap.h>
 #include "threads/palloc.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
+/* For Debugging */
+#include <stdio.h>
 
-static list cache_list;
+static struct list cache_list;
 static void* buffer_cache;
 static struct bitmap* cache_bmap;
 static struct lock cache_lock;
@@ -20,16 +23,16 @@ void
 cache_init(void)
 {
 	list_init(&cache_list);
-	buffer_cache = palloc_get_multiple(PAL_ASSERT, MAX_CACHE_SIZE / PGSIZE);
-	cache_bmap = bitmap_create(MAX_CACHE_SIZE);
 	lock_init(&cache_lock);
+	buffer_cache = palloc_get_multiple(PAL_ASSERT, MAX_CACHE_SIZE * BLOCK_SECTOR_SIZE / PGSIZE);
+	cache_bmap = bitmap_create(MAX_CACHE_SIZE);
 }
 
 /* Translate buffer position to actual buffer cache address */
 static void* 
 bufpos_to_addr(size_t bufpos)
 {
-	return (void*) (buffer_cache + (BLOCK_SECTOR_SIZE * bufpos));
+	return buffer_cache + (BLOCK_SECTOR_SIZE * bufpos);
 }
 
 /* Try to read SECTOR in cache into BUFFER by SIZE. 
@@ -44,7 +47,7 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size)
 	/* Get buffer cache metadata */
 	cache = scan_cache(sector);
 	if(cache == NULL)
-		cache = get_empty_cache(sector);
+		cache = allocate_cache(sector);
 
 	/* Read from buffer cache into BUFFER */
 	memcpy(buffer, bufpos_to_addr(cache->bufpos), size);
@@ -64,11 +67,11 @@ cache_write(block_sector_t sector, const uint8_t* buffer, size_t size)
 	/* Get buffer cache metadata */
 	cache = scan_cache(sector);
 	if(cache == NULL)
-		cache = get_empty_cache(sector);
+		cache = allocate_cache(sector);
 
 	/* Write BUFFER data into buffer cache */
 	memcpy(bufpos_to_addr(cache->bufpos), buffer, size);	
-	
+
 	/* Mark as dirty */
 	cache->dirty = true;
 
@@ -92,7 +95,7 @@ allocate_cache(block_sector_t sector)
 	
 	/* Evict if cache is full */
 	if(cache_pos == BITMAP_ERROR)
-		cache = cache_evict();
+		cache = evict_cache();
 	else
 	{
 		cache = malloc(sizeof(struct cache));
