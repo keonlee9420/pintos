@@ -155,6 +155,17 @@ syscall_handler (struct intr_frame *f)
 			break;
 		}
 		/* Project3 E */
+		/* Project4 S */
+		case SYS_CHDIR:
+			break;
+		case SYS_MKDIR:
+			break;
+		case SYS_READDIR:
+			break;
+		case SYS_ISDIR:
+			break;
+		case SYS_INUMBER:
+			break;
 		default:
 			NOT_REACHED();
 	}

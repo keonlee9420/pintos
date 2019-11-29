@@ -38,7 +38,7 @@ bufpos_to_addr(size_t bufpos)
 /* Try to read SECTOR in cache into BUFFER by SIZE. 
 	 If not exists, cache SECTOR into buffer cache then read */
 void 
-cache_read(block_sector_t sector, uint8_t* buffer, size_t size)
+cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
 {
 	struct cache* cache;
 
@@ -50,7 +50,7 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size)
 		cache = allocate_cache(sector);
 
 	/* Read from buffer cache into BUFFER */
-	memcpy(buffer, bufpos_to_addr(cache->bufpos), size);
+	memcpy(buffer, bufpos_to_addr(cache->bufpos) + ofs, size);
 
 	lock_release(&cache_lock);
 }
@@ -58,7 +58,7 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size)
 /* Try to write to SECTOR in cache from BUFFER by SIZE. 
 	 If not exists, cache SECTOR into buffer cache then write */
 void 
-cache_write(block_sector_t sector, const uint8_t* buffer, size_t size)
+cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs)
 {
 	struct cache* cache;
 
@@ -70,7 +70,7 @@ cache_write(block_sector_t sector, const uint8_t* buffer, size_t size)
 		cache = allocate_cache(sector);
 
 	/* Write BUFFER data into buffer cache */
-	memcpy(bufpos_to_addr(cache->bufpos), buffer, size);	
+	memcpy(bufpos_to_addr(cache->bufpos) + ofs, buffer, size);	
 
 	/* Mark as dirty */
 	cache->dirty = true;
