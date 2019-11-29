@@ -166,6 +166,10 @@ inode_get_inumber (const struct inode *inode)
 void
 inode_close (struct inode *inode) 
 {
+	/* Project4 S */
+	off_t ofs;
+	/* Project4 E */
+
   /* Ignore null pointer. */
   if (inode == NULL)
     return;
@@ -183,6 +187,15 @@ inode_close (struct inode *inode)
           free_map_release (inode->data.start,
                             bytes_to_sectors (inode->data.length)); 
         }
+
+			/* Project4 S */
+			/* Writeback and delete buffer cache */
+			for(ofs = 0; ofs < inode->data.length; ofs += BLOCK_SECTOR_SIZE)
+			{
+				block_sector_t sector = byte_to_sector(inode, ofs);
+				cache_delete(sector);
+			}
+			/* Project4 E */
 
       free (inode); 
     }
@@ -205,7 +218,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 {
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
-	uint8_t* bounce = NULL;
 
   while (size > 0) 
     {
@@ -223,23 +235,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       if (chunk_size <= 0)
         break;
 
+			/* Project4 S */
 			cache_read(sector_idx, buffer + bytes_read, chunk_size, sector_ofs);
-
-//			if(sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
-//			{
-//				block_read(fs_device, sector_idx, buffer + bytes_read);
-//			}
-//			else
-//			{
-//				if(bounce == NULL)
-//				{
-//					bounce = malloc(BLOCK_SECTOR_SIZE);
-//					if(bounce == NULL)
-//						break;
-//				}
-//				block_read(fs_device, sector_idx, bounce);
-//				memcpy(buffer + bytes_read, bounce + sector_ofs, chunk_size);
-//			}
+			/* Project4 E */
 
       /* Advance. */
       size -= chunk_size;
@@ -261,7 +259,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 {
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
-	uint8_t* bounce = NULL;
 
   if (inode->deny_write_cnt)
     return 0;
@@ -282,26 +279,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       if (chunk_size <= 0)
         break;
 
+			/* Project4 S */
 			cache_write(sector_idx, buffer + bytes_written, chunk_size, sector_ofs);
-//			if(sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
-//			{
-//				block_write(fs_device, sector_idx, buffer + bytes_written);
-//			}
-//			else
-//			{
-//				if(bounce == NULL)
-//				{
-//					bounce = malloc(BLOCK_SECTOR_SIZE);
-//					if(bounce == NULL)
-//						break;
-//				}
-//				if(sector_ofs > 0 || chunk_size < sector_left)
-//					block_read(fs_device, sector_idx, bounce);
-//				else
-//					memset(bounce, 0, BLOCK_SECTOR_SIZE);
-//				memcpy(bounce + sector_ofs, buffer + bytes_written, chunk_size);
-//				block_write(fs_device, sector_idx, bounce);
-//			}
+			/* Project4 E */
 
       /* Advance. */
       size -= chunk_size;

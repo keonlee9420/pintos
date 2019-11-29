@@ -42,6 +42,9 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+	/* Project4 S */
+	cache_writeback();
+	/* Project4 E */
   free_map_close ();
 }
 

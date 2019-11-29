@@ -1,11 +1,13 @@
 #include "filesys/cache.h"
 #include <string.h>
 #include <bitmap.h>
+#include "threads/thread.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
+#include "devices/timer.h"
 /* For Debugging */
 #include <stdio.h>
 
@@ -13,19 +15,27 @@ static struct list cache_list;
 static void* buffer_cache;
 static struct bitmap* cache_bmap;
 static struct lock cache_lock;
+static bool cache_runbit;
 
 #define MAX_CACHE_SIZE 64
+#define CACHE_FLUSH_INTERVAL 300
 
 static struct cache* allocate_cache(block_sector_t sector);
 static struct cache* scan_cache(block_sector_t sector);
+static void flush_cache(void* aux UNUSED);
 
 void 
 cache_init(void)
 {
+	const char tname[16] = "cache_flusher";
+
 	list_init(&cache_list);
 	lock_init(&cache_lock);
 	buffer_cache = palloc_get_multiple(PAL_ASSERT, MAX_CACHE_SIZE * BLOCK_SECTOR_SIZE / PGSIZE);
 	cache_bmap = bitmap_create(MAX_CACHE_SIZE);
+
+	/* Create Flusher thread */
+	thread_create(tname, PRI_DEFAULT, flush_cache, NULL);
 }
 
 /* Translate buffer position to actual buffer cache address */
@@ -149,4 +159,91 @@ scan_cache(block_sector_t sector)
 	return NULL;
 }
 
+/* Remove buffer cache header, with writing back
+	 Executed when file is closed */
+void 
+cache_delete(block_sector_t sector)
+{
+	struct cache* cache;
 
+	lock_acquire(&cache_lock);
+	
+	cache = scan_cache(sector);
+	if(cache == NULL)
+		goto done;
+
+	/* Reset cache bitmap as empty */
+	ASSERT(bitmap_test(cache_bmap, cache->bufpos));
+	bitmap_reset(cache_bmap, cache->bufpos);
+
+	/* If cache is modified, write back to block */
+	if(cache->dirty)
+		block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
+
+	/* Remove cache metadata */
+	list_remove(&cache->elem);
+	free(cache);
+
+	done:
+		lock_release(&cache_lock);
+}
+
+/* Flush entire buffer cache into filesys disk 
+	 Write back buffer with dirty bit */
+void 
+cache_writeback(void)
+{
+	struct cache* cache;
+	
+	lock_acquire(&cache_lock);
+
+	while(!list_empty(&cache_list))
+	{
+		cache = list_entry(list_pop_front(&cache_list), struct cache, elem);
+
+		/* Reset cache bitmap as empty */
+		ASSERT(bitmap_test(cache_bmap, cache->bufpos));
+		bitmap_reset(cache_bmap, cache->bufpos);
+
+		/* If cache is modified, write back to block */
+		if(cache->dirty)
+			block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
+
+		/* Remove cache metadata */
+		list_remove(&cache->elem);
+		free(cache);
+	}
+	
+	cache_runbit = false;
+	
+	lock_release(&cache_lock);
+}
+
+static void 
+flush_cache(void* aux UNUSED)
+{
+	struct cache* cache;
+	struct list_elem* e;
+
+	cache_runbit = true;
+
+	while(cache_runbit)
+	{
+		lock_acquire(&cache_lock);
+
+		for(e = list_begin(&cache_list); e != list_end(&cache_list); 
+				e = list_next(e))
+		{
+			cache = list_entry(e, struct cache, elem);
+			if(cache->dirty)
+			{
+				block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
+				cache->dirty = false;
+			}
+		}
+
+		lock_release(&cache_lock);
+
+		timer_sleep(CACHE_FLUSH_INTERVAL);
+	}
+}
