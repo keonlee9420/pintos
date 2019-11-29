@@ -1,9 +1,10 @@
 #ifndef FILESYS_CACHE_H
 #define FILESYS_CACHE_H
 
-#include "threads/vaddr.h"
-#include <list.h>
 #include "devices/block.h"
+#include "threads/vaddr.h"
+#include "filesys/off_t.h"
+#include <list.h>
 #include <stdbool.h>
 
 /* Maximun size of physical memory for buffer cache in block sector size */
@@ -22,7 +23,7 @@ struct buffer_cache
 };
 
 void buffer_cache_init (void);
-void cache_read (block_sector_t sector, uint8_t* buffer, size_t size);
-void cache_write (block_sector_t sector, const uint8_t* buffer, size_t size);
+void cache_read (block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs);
+void cache_write (block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs);
 
 #endif /* filesys/cache.h */

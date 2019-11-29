@@ -224,7 +224,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       /* Project4 S */
       /* Read from cache */
-      cache_read(sector_idx, buffer + bytes_read, chunk_size);
+      cache_read(sector_idx, buffer + bytes_read, chunk_size, sector_ofs);
       /* Project4 E */
       
       /* Advance. */
@@ -269,7 +269,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
       /* Project4 S */
       /* Write on cache */
-      cache_write(sector_idx, buffer + bytes_written, chunk_size);
+      cache_write(sector_idx, buffer + bytes_written, chunk_size, sector_ofs);
       /* Project4 E */
 
       /* Advance. */
