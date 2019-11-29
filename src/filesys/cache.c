@@ -22,6 +22,8 @@ static struct buffer_cache* caching (block_sector_t sector);
 static struct buffer_cache* look_up_cache (block_sector_t sector);
 static void cache_flush (void *aux UNUSED);
 static void write_back (bool close);
+static void cache_read_ahead (void *aux);
+static void read_next_block_ahead (block_sector_t sector);
 
 /* Initiate buffer cache */
 void
@@ -39,7 +41,7 @@ buffer_cache_init ()
   }
 
   /* Flush the cache periodically */
-  thread_create("cache_flush", 0, cache_flush, NULL);
+  thread_create ("cache_flush", 0, cache_flush, NULL);
 }
 
 /* Close cache system in case filesys done */
@@ -70,7 +72,8 @@ setup_cache (struct buffer_cache* bc, block_sector_t sector, unsigned offset)
   bc->dirty_bit = false;
   bc->ref_bit = true;
 
-  block_read (fs_device, sector, get_cache_zone(bc->offset));
+  /* Read the current block */
+  block_read (fs_device, sector, get_cache_zone (bc->offset));
 }
 
 /* Select victim cache and return it after reset with new sector data.
@@ -84,8 +87,8 @@ evict (block_sector_t sector)
   /* Iterate on each elemt unless we find proper victim */
   while (true)
   {
-    if(e == list_end(&buffer_cache_list))
-      e = list_begin(&buffer_cache_list);
+    if(e == list_end (&buffer_cache_list))
+      e = list_begin (&buffer_cache_list);
     bc = list_entry (e, struct buffer_cache, elem);
 
     /* If the buffer cache is recently accessed, then move on to the next cache */
@@ -99,7 +102,7 @@ evict (block_sector_t sector)
 
     /* Write behind */
     if (bc->dirty_bit)
-      block_write (fs_device, bc->sector, get_cache_zone(bc->offset));
+      block_write (fs_device, bc->sector, get_cache_zone (bc->offset));
 
     /* Setup victim cache with new sector data */
     setup_cache (bc, sector, bc->offset);
@@ -164,7 +167,7 @@ look_up_cache (block_sector_t sector)
 
 /* Read from cache with sector data */
 void
-cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
+cache_read (block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
 {
   struct buffer_cache* bc;
   bc = look_up_cache (sector);
@@ -172,10 +175,10 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
   lock_acquire (&cache_locks[bc->offset]);
 
   /* Read cache into buffer */
-  memcpy(buffer, get_cache_zone (bc->offset) + ofs, size);
+  memcpy (buffer, get_cache_zone (bc->offset) + ofs, size);
 
   /* Mark referenced */
-  if (!bc->ref_bit) 
+  if (!bc->ref_bit)
     bc->ref_bit = true;
   
   lock_release (&cache_locks[bc->offset]);
@@ -183,7 +186,7 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
 
 /* Write on cache with sector data */
 void
-cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs)
+cache_write (block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs)
 {
   struct buffer_cache* bc;
   bc = look_up_cache (sector);
@@ -191,7 +194,7 @@ cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs
   lock_acquire (&cache_locks[bc->offset]);
 
   /* Write buffer into cache */
-  memcpy(get_cache_zone (bc->offset) + ofs, buffer, size);
+  memcpy (get_cache_zone (bc->offset) + ofs, buffer, size);
 
   /* Mark dirty */
   bc->dirty_bit = true;
@@ -222,19 +225,19 @@ write_back (bool close)
   struct list_elem* e = list_begin (&buffer_cache_list);
   struct buffer_cache* bc = NULL;
 
-  lock_acquire(&cache_system_lock);
+  lock_acquire (&cache_system_lock);
 
   /* Iterate on buffer cache list and write dirty cache back to disk */
   while (true)
   {
-    if(e == list_end(&buffer_cache_list))
+    if(e == list_end (&buffer_cache_list))
       break;
 
     /* Write dirty cache back to disk */
     bc = list_entry (e, struct buffer_cache, elem);
     if (bc->dirty_bit)
       {
-        block_write(fs_device, bc->sector, get_cache_zone (bc->offset));
+        block_write (fs_device, bc->sector, get_cache_zone (bc->offset));
         bc->dirty_bit = false;
       }
     
@@ -251,5 +254,30 @@ write_back (bool close)
     }
   }
 
-  lock_release(&cache_system_lock);
+  lock_release (&cache_system_lock);
+}
+
+/* Reader function to read the next block ahead */
+static void
+cache_read_ahead (void *aux)
+{
+  block_sector_t sector = *(block_sector_t *)aux;
+
+  /* Caching */
+  lock_acquire (&cache_system_lock);
+  caching (sector);
+  lock_release (&cache_system_lock);
+
+  free (aux);
+}
+
+/* Asynchronously read the next block ahead */
+static void
+read_next_block_ahead (block_sector_t sector)
+{
+  block_sector_t* aux = malloc (sizeof (block_sector_t));
+  *aux = sector + 1;
+
+  /* Read the next block */
+  thread_create ("cache_read_ahead", 0, cache_read_ahead, aux);
 }
