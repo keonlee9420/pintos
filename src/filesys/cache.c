@@ -100,7 +100,7 @@ caching (block_sector_t sector)
   {
     /* If we can allocate cache slot, then make new cache. */
     bc = malloc (BLOCK_SECTOR_SIZE);
-    setup_cache (bc, sector, bitmap_scan_and_flip (cache_bmap, 0, 1, true));
+    setup_cache (bc, sector, bitmap_scan_and_flip (cache_bmap, 0, 1, false));
     list_push_back (&buffer_cache_list, &bc->elem);
   }
 

@@ -227,30 +227,27 @@ page_fault (struct intr_frame *f)
 	}
 
 	/* Handle page fault according to page installation status */
-	lock_acquire(&load_lock);
 	switch(spage->status)
 	{
 		/* LOAD, MMAP: Read file, then map upage */
 		case SPAGE_LOAD:
 		case SPAGE_MMAP:
 			if(!lazy_load(spage))
-			{
-				lock_release(&load_lock);
 				thread_exit();
-			}
-			break;
+         break;
 		/* SWAP: Swap back in */
 		case SPAGE_SWAP:
 		{
 			void* upage = pg_round_down(fault_addr);
-			swap_in(upage);
+         lock_acquire(&load_lock);
+         swap_in(upage);
+         lock_release(&load_lock);
 			break;
 		}
 		/* Stack: this should not happen */
 		case SPAGE_STACK:
 			NOT_REACHED();
 	}
-	lock_release(&load_lock);
 }
 
 /* Read file data into kpage from saved offset, 
@@ -265,6 +262,7 @@ lazy_load(struct spage* spage)
 	if(file == NULL)
 		return false;
 		
+   lock_acquire(&load_lock);    
 	kpage = frame_allocate(PAL_ZERO);
 
 	lock_acquire(&filesys_lock);
@@ -279,6 +277,7 @@ lazy_load(struct spage* spage)
 
 	load_end:
 		lock_release(&filesys_lock);
+      lock_release(&load_lock);
 		if(!success)
 			frame_free(kpage);
 		return success;
