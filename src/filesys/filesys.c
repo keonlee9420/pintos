@@ -42,6 +42,9 @@ void
 filesys_done (void) 
 {
   free_map_close ();
+  /* Project4 S */
+  buffer_cache_close ();
+  /* Project4 E */
 }
 
 /* Creates a file named NAME with the given INITIAL_SIZE.

@@ -1,8 +1,10 @@
+#include "devices/timer.h"
 #include "filesys/cache.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
 #include <bitmap.h>
 #include <string.h>
 
@@ -18,6 +20,8 @@ static void setup_cache (struct buffer_cache* bc, block_sector_t sector, unsigne
 static struct buffer_cache* evict (block_sector_t sector);
 static struct buffer_cache* caching (block_sector_t sector);
 static struct buffer_cache* look_up_cache (block_sector_t sector);
+static void cache_flush (void *aux UNUSED);
+static void write_back (bool close);
 
 /* Initiate buffer cache */
 void
@@ -27,11 +31,27 @@ buffer_cache_init ()
   cache_zone = palloc_get_multiple (PAL_ASSERT, MAX_BUFFER_CACHE_IN_PGSIZE);
   cache_bmap = bitmap_create (MAX_BUFFER_CACHE_IN_BSSIZE);
   lock_init (&cache_system_lock);
+
   /* Individual lock init */
   for (int i = 0; i < MAX_BUFFER_CACHE_IN_BSSIZE; i++)
   {
     lock_init (&cache_locks[i]);
   }
+
+  /* Flush the cache periodically */
+  thread_create("cache_flush", 0, cache_flush, NULL);
+}
+
+/* Close cache system in case filesys done */
+void
+buffer_cache_close ()
+{
+  /* Write back before close */
+  write_back (true);
+
+  /* Close */
+  palloc_free_multiple (cache_zone, MAX_BUFFER_CACHE_IN_PGSIZE);
+  bitmap_destroy (cache_bmap);
 }
 
 /* Return actual(physical) address of buffer cache */
@@ -72,6 +92,7 @@ evict (block_sector_t sector)
     if (bc->ref_bit)
     {
       bc->ref_bit = false;
+      /* Advance */
       e = list_next (e);
       continue;
     }
@@ -141,7 +162,7 @@ look_up_cache (block_sector_t sector)
   return bc;
 }
 
-/* Read from cache with sector data. */
+/* Read from cache with sector data */
 void
 cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
 {
@@ -151,7 +172,7 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
   lock_acquire (&cache_locks[bc->offset]);
 
   /* Read cache into buffer */
-  memcpy(buffer, get_cache_zone(bc->offset) + ofs, size);
+  memcpy(buffer, get_cache_zone (bc->offset) + ofs, size);
 
   /* Mark referenced */
   if (!bc->ref_bit) 
@@ -160,7 +181,7 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
   lock_release (&cache_locks[bc->offset]);
 }
 
-/* Write on cache with sector data. */
+/* Write on cache with sector data */
 void
 cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs)
 {
@@ -170,7 +191,7 @@ cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs
   lock_acquire (&cache_locks[bc->offset]);
 
   /* Write buffer into cache */
-  memcpy(get_cache_zone(bc->offset) + ofs, buffer, size);
+  memcpy(get_cache_zone (bc->offset) + ofs, buffer, size);
 
   /* Mark dirty */
   bc->dirty_bit = true;
@@ -180,4 +201,55 @@ cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs
     bc->ref_bit = true;
 
   lock_release (&cache_locks[bc->offset]);
+}
+
+/* Flusher function to flush the cache periodically */
+static void 
+cache_flush (void *aux UNUSED)
+{
+  while (true)
+  {
+    timer_sleep (FLUSH_TIME_SLICE);
+    write_back (false);
+  }
+}
+
+/* Write dirty cache back to disk. 
+    If CLOSE is true, then close(destroy) the cache system. */
+static void 
+write_back (bool close)
+{
+  struct list_elem* e = list_begin (&buffer_cache_list);
+  struct buffer_cache* bc = NULL;
+
+  lock_acquire(&cache_system_lock);
+
+  /* Iterate on buffer cache list and write dirty cache back to disk */
+  while (true)
+  {
+    if(e == list_end(&buffer_cache_list))
+      break;
+
+    /* Write dirty cache back to disk */
+    bc = list_entry (e, struct buffer_cache, elem);
+    if (bc->dirty_bit)
+      {
+        block_write(fs_device, bc->sector, get_cache_zone (bc->offset));
+        bc->dirty_bit = false;
+      }
+    
+    /* Advance */
+    struct list_elem* e_prev = e;
+    e = list_next (e_prev);
+
+    /* Close cache slot */
+    if (close)
+    {
+      list_remove (e_prev);
+      bitmap_reset (cache_bmap, bc->offset);
+      free (bc);
+    }
+  }
+
+  lock_release(&cache_system_lock);
 }

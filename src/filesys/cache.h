@@ -6,12 +6,16 @@
 #include "filesys/off_t.h"
 #include <list.h>
 #include <stdbool.h>
+#include <debug.h>
 
 /* Maximun size of physical memory for buffer cache in block sector size */
 #define MAX_BUFFER_CACHE_IN_BSSIZE 64
 
 /* Maximun size of physical memory for buffer cache in page size */
 #define MAX_BUFFER_CACHE_IN_PGSIZE (MAX_BUFFER_CACHE_IN_BSSIZE * BLOCK_SECTOR_SIZE) / PGSIZE
+
+/* Buffer cache flusher time slice */
+#define FLUSH_TIME_SLICE 400
 
 struct buffer_cache
 {
@@ -23,6 +27,7 @@ struct buffer_cache
 };
 
 void buffer_cache_init (void);
+void buffer_cache_close (void);
 void cache_read (block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs);
 void cache_write (block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs);
 
