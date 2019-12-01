@@ -22,8 +22,6 @@ struct process
 	struct list_elem elem;
 };
 
-extern struct lock filesys_lock;
-
 void process_init(void);
 /* Project2 E */
 

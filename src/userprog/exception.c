@@ -265,7 +265,6 @@ lazy_load(struct spage* spage)
    lock_acquire(&load_lock);    
 	kpage = frame_allocate(PAL_ZERO);
 
-	lock_acquire(&filesys_lock);
 	if(file_read_at(file, kpage, spage->readbyte, spage->offset) != 
 		 (int) spage->readbyte)
 		goto load_end;
@@ -276,7 +275,6 @@ lazy_load(struct spage* spage)
 	success = true;
 
 	load_end:
-		lock_release(&filesys_lock);
       lock_release(&load_lock);
 		if(!success)
 			frame_free(kpage);

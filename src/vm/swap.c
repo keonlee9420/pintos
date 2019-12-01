@@ -37,10 +37,8 @@ swap_out(void)
 	/* MMAP: Write back to file */
 	if(spage_victim->status == SPAGE_MMAP)
 	{
-		lock_acquire(&filesys_lock);
 		file_write_at(spage_victim->file, kpage, 
 									spage_victim->readbyte, spage_victim->offset);
-		lock_release(&filesys_lock);
 	}
 
 	/* If out page is dirty, swap out to disk */

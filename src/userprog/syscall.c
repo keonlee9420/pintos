@@ -264,9 +264,7 @@ sys_create(const char* file, unsigned initial_size)
 
 	valid_string(file);
 
-	lock_acquire(&filesys_lock);
 	success = filesys_create(file, initial_size);
-	lock_release(&filesys_lock);
 
 	return success;
 }
@@ -278,9 +276,7 @@ sys_remove(const char* file)
 
 	valid_string(file);
 
-	lock_acquire(&filesys_lock);
 	success = filesys_remove(file);
-	lock_release(&filesys_lock);
 
 	return success;
 }
@@ -293,7 +289,6 @@ sys_open(const char* filename)
 
 	valid_string(filename);
 
-	lock_acquire(&filesys_lock);
 	if((file = filesys_open(filename)) == NULL)
 		goto done;
 
@@ -303,7 +298,6 @@ sys_open(const char* filename)
 		file_deny_write(file);
 
 	done:
-		lock_release(&filesys_lock);
 		return fd;	
 }
 
@@ -316,9 +310,7 @@ sys_filesize(int fd)
 	if(file == NULL)
 		return 0;
 
-	lock_acquire(&filesys_lock);
 	filesize = file_length(file);
-	lock_release(&filesys_lock);
 
 	return filesize;
 }
@@ -354,9 +346,7 @@ sys_read(int fd, void* buffer, unsigned size)
 
 			bytes = malloc(size);
 
-			lock_acquire(&filesys_lock);
 			readsize = file_read(file, bytes, size);
-			lock_release(&filesys_lock);
 
 			for(i = 0; i < readsize; i++)
 				if(!write_buffer(buffer + i, bytes[i]))
@@ -392,9 +382,7 @@ sys_write(int fd, const void* buffer, unsigned size)
 
 			valid_string(buffer);
 
-			lock_acquire(&filesys_lock);
 			writesize = file_write(file, buffer, size);
-			lock_release(&filesys_lock);
 			
 			return writesize;
 		}
@@ -409,9 +397,7 @@ sys_seek(int fd, unsigned position)
 	if(file == NULL)
 		return;
 
-	lock_acquire(&filesys_lock);
 	file_seek(file, position);
-	lock_release(&filesys_lock);
 }
 
 static unsigned 
@@ -423,9 +409,7 @@ sys_tell(int fd)
 	if(file == NULL)
 		return 0;
 
-	lock_acquire(&filesys_lock);
 	position = file_tell(file);
-	lock_release(&filesys_lock);
 
 	return position;
 }
@@ -438,9 +422,7 @@ sys_close(int fd)
 	if(file == NULL)
 		return;
 
-	lock_acquire(&filesys_lock);
 	file_close(file);
-	lock_release(&filesys_lock);
 }
 /* Project2 E */
 
@@ -462,10 +444,8 @@ sys_mmap(int fd, void* addr)
 	if((file = fd_get_file(fd)) == NULL)
 		return -1;	
 	
-	lock_acquire(&filesys_lock);
 	file = file_reopen(file);
 	fsize = file_length(file);
-	lock_release(&filesys_lock);
 
 	/* Return if mapping zero byte */
 	if(fsize == 0)
@@ -508,9 +488,7 @@ sys_munmap(mapid_t mapping)
 	mmap_writeback(map->file, map->addr);
 
 	/* Close file */
-	lock_acquire(&filesys_lock);
 	file_close(map->file);
-	lock_release(&filesys_lock);
 
 	/* Remove mmap element */
 	list_remove(&map->elem);

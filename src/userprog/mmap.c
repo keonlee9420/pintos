@@ -38,9 +38,7 @@ mmap_destroy(void)
 		mmap_writeback(map->file, map->addr);
 	
 		/* Close file */
-		lock_acquire(&filesys_lock);
 		file_close(map->file);
-		lock_release(&filesys_lock);
 
 		/* Free mmap structure */
 		free(map);
@@ -75,18 +73,14 @@ mmap_writeback(struct file* file, void* addr)
 
 	ASSERT(file != NULL);
 
-	lock_acquire(&filesys_lock);
 	fsize = (int)file_length(file);
-	lock_release(&filesys_lock);
 
 	while(fsize > 0)
 	{
 		struct spage* spage = spage_lookup(spt, addr);
 		if(pagedir_get_page(pd, addr) != NULL && pagedir_is_dirty(pd, addr))
 		{
-			lock_acquire(&filesys_lock);
 			file_write_at(file, addr, spage->readbyte, spage->offset);
-			lock_release(&filesys_lock);
 			pagedir_clear_page(pd, addr);
 		}
 		spage_free(addr);

@@ -41,16 +41,12 @@ static struct process* find_process(pid_t child_pid);
 static struct list proc_list;
 static struct lock proclist_lock;
 
-/* Synchronization object */
-struct lock filesys_lock;
-
 /* Initialize process system */
 void 
 process_init(void)
 {
 	list_init(&proc_list);
 	lock_init(&proclist_lock);
-	lock_init(&filesys_lock);
 }
 /* Project2 E */
 
@@ -189,9 +185,7 @@ process_exit (void)
 	file = thread_current()->loadfile;
 	if(file != NULL)
 	{
-		lock_acquire(&filesys_lock);
 		file_close(file);
-		lock_release(&filesys_lock);
 	}
 	/* Project3 E */
 
@@ -327,7 +321,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 	parse_title(file_title, file_name);
 
-  lock_acquire(&filesys_lock);
 	/* Project2 E */
 
 	/* Project3 S */
@@ -439,7 +432,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* Project2 S */
-	lock_release(&filesys_lock);
 	/* Project2 E */
 	return success;
 }

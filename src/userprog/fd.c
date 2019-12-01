@@ -68,9 +68,7 @@ fd_collapse(void)
 	{
 		struct fd_data* fd_data = list_entry(list_pop_front(filelist), 
 																				 struct fd_data, elem);
-		lock_acquire(&filesys_lock);
 		file_close(fd_data->file);
-		lock_release(&filesys_lock);
 		free(fd_data);
 	}
 }
