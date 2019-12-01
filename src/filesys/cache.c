@@ -21,6 +21,7 @@ static void* get_cache_zone (unsigned offset);
 static void setup_cache (struct buffer_cache* bc, block_sector_t sector, unsigned offset);
 static struct buffer_cache* evict (block_sector_t sector);
 static struct buffer_cache* caching (block_sector_t sector);
+static struct buffer_cache* find_cache (block_sector_t sector);
 static struct buffer_cache* look_up_cache (block_sector_t sector);
 static void cache_flush (void *aux UNUSED);
 static void write_back (bool close);
@@ -122,8 +123,6 @@ caching (block_sector_t sector)
 {
   struct buffer_cache* bc;
   bool isFull;
-
-  lock_acquire (&cache_system_lock);
   
   isFull = bitmap_all ((const struct bitmap*)cache_bmap, 0, bitmap_size (cache_bmap));
   
@@ -137,9 +136,27 @@ caching (block_sector_t sector)
     list_push_back (&buffer_cache_list, &bc->elem);
   }
 
-  lock_release (&cache_system_lock);
-
   return bc;
+}
+
+/* Find and return cache with SECTOR. 
+    Return NULL if no such cache. */
+static struct buffer_cache*
+find_cache (block_sector_t sector)
+{
+  struct list_elem* e;
+  struct buffer_cache* bc;
+
+  /* Find cache with sector data */
+  for (e = list_begin (&buffer_cache_list); e != list_end (&buffer_cache_list);
+      e = list_next (e))
+  {
+    bc = list_entry (e, struct buffer_cache, elem);
+    if (bc->sector == sector)
+        return bc;
+  }
+
+  return NULL;
 }
 
 /* Find cache with sector data.
@@ -148,37 +165,29 @@ caching (block_sector_t sector)
 static struct buffer_cache*
 look_up_cache (block_sector_t sector)
 {
-  struct list_elem* e;
-  struct buffer_cache* bc = NULL;
+  struct buffer_cache* bc;
 
-  // sema_down (&cache_read_ahead_sema);
+  /* Wait for read-aheader to finish retrieving the next sector */
+  sema_down (&cache_read_ahead_sema);
 
-  /* Find cache with sector data */
-  for (e = list_begin (&buffer_cache_list); e != list_end (&buffer_cache_list);
-      e = list_next (e))
-  {
-    struct buffer_cache* bc_itr = list_entry (e, struct buffer_cache, elem);
-    if (bc_itr->sector == sector)
-      {
-        bc = bc_itr;
-        break;
-      }
-  }
+  lock_acquire (&cache_system_lock);
 
   /* If there is no previous cache, then cache it */
-  if (bc == NULL)
+  if ((bc = find_cache (sector)) == NULL)
   {
     bc = caching (sector);
+    lock_release (&cache_system_lock);
     // printf ("[load] tid=%d sector=%d\n", thread_current ()->tid, sector);
 
     /* Read ahead */
-    // read_next_block_ahead (sector);
+    read_next_block_ahead (sector);
   } 
-  else
-    {
-      // printf ("[only read] tid=%d sector=%d\n", thread_current ()->tid, sector);
-      // sema_up (&cache_read_ahead_sema);
-    }
+  else 
+  {
+    lock_release (&cache_system_lock);
+    sema_up (&cache_read_ahead_sema);
+    // printf ("[only read] tid=%d sector=%d\n", thread_current ()->tid, sector);
+  }
 
   return bc;
 }
@@ -281,9 +290,16 @@ cache_read_ahead (void *aux)
 {
   block_sector_t sector = *(block_sector_t *)aux;
 
+  lock_acquire (&cache_system_lock);
+
   /* Caching */
-  caching (sector);
-  // printf ("[load ahead] tid=%d sector=%d\n", thread_current ()->tid, sector);
+  if (!find_cache (sector))
+    caching (sector);
+    // printf ("[load next] tid=%d sector=%d\n", thread_current ()->tid, sector);
+  
+  lock_release (&cache_system_lock);
+
+  /* Sema up for normal caching */
   sema_up (&cache_read_ahead_sema);
 
   free (aux);

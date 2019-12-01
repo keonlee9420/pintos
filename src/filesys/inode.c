@@ -88,6 +88,7 @@ inode_create (block_sector_t sector, off_t length)
      one sector in size, and you should fix that. */
   ASSERT (sizeof *disk_inode == BLOCK_SECTOR_SIZE);
 
+  lock_acquire (&inodes_lock);
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode != NULL)
     {
@@ -109,6 +110,8 @@ inode_create (block_sector_t sector, off_t length)
         } 
       free (disk_inode);
     }
+  lock_release (&inodes_lock);
+
   return success;
 }
 
@@ -214,7 +217,9 @@ void
 inode_remove (struct inode *inode) 
 {
   ASSERT (inode != NULL);
+  lock_acquire (&inode->lock);
   inode->removed = true;
+  lock_release (&inode->lock);
 }
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
