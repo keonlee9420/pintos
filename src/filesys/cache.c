@@ -7,12 +7,14 @@
 #include "threads/thread.h"
 #include <bitmap.h>
 #include <string.h>
+#include <stdio.h>
 
 struct list buffer_cache_list;    /* List for buffer cache element */
 void* cache_zone;                 /* Start point of buffer cache in physical memory */
 struct bitmap* cache_bmap;        /* Bitmap structure for buffer cache management */
 
 static struct lock cache_system_lock;   /* Lock for handling new caching */
+static struct semaphore cache_read_ahead_sema;   /* Semaphore for handling read ahead */
 static struct lock cache_locks[MAX_BUFFER_CACHE_IN_BSSIZE];   /* Individual locks for each cache slot */
 
 static void* get_cache_zone (unsigned offset);
@@ -33,6 +35,7 @@ buffer_cache_init ()
   cache_zone = palloc_get_multiple (PAL_ASSERT, MAX_BUFFER_CACHE_IN_PGSIZE);
   cache_bmap = bitmap_create (MAX_BUFFER_CACHE_IN_BSSIZE);
   lock_init (&cache_system_lock);
+  sema_init (&cache_read_ahead_sema, 1);
 
   /* Individual lock init */
   for (int i = 0; i < MAX_BUFFER_CACHE_IN_BSSIZE; i++)
@@ -118,8 +121,12 @@ static struct buffer_cache*
 caching (block_sector_t sector)
 {
   struct buffer_cache* bc;
-  bool isFull = bitmap_all ((const struct bitmap*)cache_bmap, 0, bitmap_size (cache_bmap));
+  bool isFull;
 
+  lock_acquire (&cache_system_lock);
+  
+  isFull = bitmap_all ((const struct bitmap*)cache_bmap, 0, bitmap_size (cache_bmap));
+  
   if (isFull)
     bc = evict (sector);  /* If there is no more cache slot, then evicting. */
   else
@@ -129,6 +136,8 @@ caching (block_sector_t sector)
     setup_cache (bc, sector, bitmap_scan_and_flip (cache_bmap, 0, 1, false));
     list_push_back (&buffer_cache_list, &bc->elem);
   }
+
+  lock_release (&cache_system_lock);
 
   return bc;
 }
@@ -141,6 +150,8 @@ look_up_cache (block_sector_t sector)
 {
   struct list_elem* e;
   struct buffer_cache* bc = NULL;
+
+  // sema_down (&cache_read_ahead_sema);
 
   /* Find cache with sector data */
   for (e = list_begin (&buffer_cache_list); e != list_end (&buffer_cache_list);
@@ -157,10 +168,17 @@ look_up_cache (block_sector_t sector)
   /* If there is no previous cache, then cache it */
   if (bc == NULL)
   {
-    lock_acquire (&cache_system_lock);
     bc = caching (sector);
-    lock_release (&cache_system_lock);
-  }
+    // printf ("[load] tid=%d sector=%d\n", thread_current ()->tid, sector);
+
+    /* Read ahead */
+    // read_next_block_ahead (sector);
+  } 
+  else
+    {
+      // printf ("[only read] tid=%d sector=%d\n", thread_current ()->tid, sector);
+      // sema_up (&cache_read_ahead_sema);
+    }
 
   return bc;
 }
@@ -264,9 +282,9 @@ cache_read_ahead (void *aux)
   block_sector_t sector = *(block_sector_t *)aux;
 
   /* Caching */
-  lock_acquire (&cache_system_lock);
   caching (sector);
-  lock_release (&cache_system_lock);
+  // printf ("[load ahead] tid=%d sector=%d\n", thread_current ()->tid, sector);
+  sema_up (&cache_read_ahead_sema);
 
   free (aux);
 }
