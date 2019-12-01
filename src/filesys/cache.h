@@ -19,5 +19,6 @@ void cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs);
 void cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs);
 void cache_delete(block_sector_t sector);
 void cache_writeback(void);
+void cache_install(block_sector_t sector);
 
 #endif /* filesys/cache.h */

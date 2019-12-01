@@ -1,4 +1,5 @@
 #include "filesys/cache.h"
+#include <stdint.h>
 #include <string.h>
 #include <bitmap.h>
 #include "threads/thread.h"
@@ -11,14 +12,15 @@
 /* For Debugging */
 #include <stdio.h>
 
+#define MAX_CACHE_SIZE 64
+#define CACHE_FLUSH_INTERVAL 10
+
 static struct list cache_list;
 static void* buffer_cache;
 static struct bitmap* cache_bmap;
 static struct lock cache_lock;
+static struct lock cell_lock[MAX_CACHE_SIZE];
 static bool cache_runbit;
-
-#define MAX_CACHE_SIZE 64
-#define CACHE_FLUSH_INTERVAL 300
 
 static struct cache* allocate_cache(block_sector_t sector);
 static struct cache* scan_cache(block_sector_t sector);
@@ -27,19 +29,22 @@ static void flush_cache(void* aux UNUSED);
 void 
 cache_init(void)
 {
-	const char tname[16] = "cache_flusher";
+	int i;
 
 	list_init(&cache_list);
 	lock_init(&cache_lock);
 	buffer_cache = palloc_get_multiple(PAL_ASSERT, MAX_CACHE_SIZE * BLOCK_SECTOR_SIZE / PGSIZE);
 	cache_bmap = bitmap_create(MAX_CACHE_SIZE);
 
+	for(i = 0; i < MAX_CACHE_SIZE; i++)
+		lock_init(&cell_lock[i]);
+
 	/* Create Flusher thread */
-	thread_create(tname, PRI_DEFAULT, flush_cache, NULL);
+	thread_create("cache_flusher", PRI_DEFAULT, flush_cache, NULL);
 }
 
 /* Translate buffer position to actual buffer cache address */
-static void* 
+static inline void* 
 bufpos_to_addr(size_t bufpos)
 {
 	return buffer_cache + (BLOCK_SECTOR_SIZE * bufpos);
@@ -59,10 +64,12 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
 	if(cache == NULL)
 		cache = allocate_cache(sector);
 
+	lock_acquire(&cell_lock[cache->bufpos]);
+	lock_release(&cache_lock);
+
 	/* Read from buffer cache into BUFFER */
 	memcpy(buffer, bufpos_to_addr(cache->bufpos) + ofs, size);
-
-	lock_release(&cache_lock);
+	lock_release(&cell_lock[cache->bufpos]);
 }
 
 /* Try to write to SECTOR in cache from BUFFER by SIZE. 
@@ -79,13 +86,15 @@ cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs
 	if(cache == NULL)
 		cache = allocate_cache(sector);
 
-	/* Write BUFFER data into buffer cache */
-	memcpy(bufpos_to_addr(cache->bufpos) + ofs, buffer, size);	
+	lock_acquire(&cell_lock[cache->bufpos]);
+	lock_release(&cache_lock);
 
 	/* Mark as dirty */
 	cache->dirty = true;
 
-	lock_release(&cache_lock);
+	/* Write BUFFER data into buffer cache */
+	memcpy(bufpos_to_addr(cache->bufpos) + ofs, buffer, size);	
+	lock_release(&cell_lock[cache->bufpos]);
 }
 
 static struct cache* evict_cache(void);
@@ -159,6 +168,7 @@ scan_cache(block_sector_t sector)
 	return NULL;
 }
 
+/* Write-Behind Policy */
 /* Remove buffer cache header, with writing back
 	 Executed when file is closed */
 void 
@@ -195,6 +205,8 @@ cache_writeback(void)
 {
 	struct cache* cache;
 	
+	cache_runbit = false;
+	
 	lock_acquire(&cache_lock);
 
 	while(!list_empty(&cache_list))
@@ -214,11 +226,10 @@ cache_writeback(void)
 		free(cache);
 	}
 	
-	cache_runbit = false;
-	
 	lock_release(&cache_lock);
 }
 
+/* Flush cache content into file disk periodically. */
 static void 
 flush_cache(void* aux UNUSED)
 {
@@ -246,4 +257,38 @@ flush_cache(void* aux UNUSED)
 
 		timer_sleep(CACHE_FLUSH_INTERVAL);
 	}
+}
+
+/* Read-Ahead Policy */
+static void fetch_block(void* aux);
+
+/* Install SECTOR data into buffer cache */
+void 
+cache_install(block_sector_t sector_)
+{
+	block_sector_t* sector = malloc(sizeof(block_sector_t));
+	*sector = sector_;
+
+	if(sector_ == UINT32_MAX)
+		return;
+	
+	thread_create("read_aheader", PRI_DEFAULT, fetch_block, sector);
+}
+
+static void 
+fetch_block(void* aux)
+{
+	struct cache* cache;
+	block_sector_t* sector = aux;
+
+	lock_acquire(&cache_lock);
+
+	/* Get buffer cache metadata */
+	cache = scan_cache(*sector);
+	if(cache == NULL)
+		allocate_cache(*sector);
+
+	lock_release(&cache_lock);
+
+	free(sector);
 }
