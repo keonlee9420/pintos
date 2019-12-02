@@ -58,7 +58,6 @@ cache_read(block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
 	struct cache* cache;
 
 	lock_acquire(&cache_lock);
-
 	/* Get buffer cache metadata */
 	cache = scan_cache(sector);
 	if(cache == NULL)
@@ -80,7 +79,6 @@ cache_write(block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs
 	struct cache* cache;
 
 	lock_acquire(&cache_lock);
-
 	/* Get buffer cache metadata */
 	cache = scan_cache(sector);
 	if(cache == NULL)
@@ -122,7 +120,9 @@ allocate_cache(block_sector_t sector)
 	}
 	cache->dirty = false;
 	cache->sector = sector;
+	lock_acquire(&cell_lock[cache->bufpos]);
 	block_read(fs_device, sector, bufpos_to_addr(cache->bufpos));
+	lock_release(&cell_lock[cache->bufpos]);
 	list_push_back(&cache_list, &cache->elem);
 
 	return cache;
@@ -141,8 +141,10 @@ evict_cache(void)
 
 	/* 이 부분에서 evict policy 바꾸면서 해봐도 될 꺼같음 */
 	cache = list_entry(list_pop_front(&cache_list), struct cache, elem);
+	lock_acquire(&cell_lock[cache->bufpos]);
 	if(cache->dirty)
 		block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
+	lock_release(&cell_lock[cache->bufpos]);
 
 	return cache;
 }
@@ -177,7 +179,6 @@ cache_delete(block_sector_t sector)
 	struct cache* cache;
 
 	lock_acquire(&cache_lock);
-	
 	cache = scan_cache(sector);
 	if(cache == NULL)
 		goto done;
@@ -188,7 +189,11 @@ cache_delete(block_sector_t sector)
 
 	/* If cache is modified, write back to block */
 	if(cache->dirty)
+	{
+		lock_acquire(&cell_lock[cache->bufpos]);
 		block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
+		lock_release(&cell_lock[cache->bufpos]);
+	}
 
 	/* Remove cache metadata */
 	list_remove(&cache->elem);
@@ -206,9 +211,8 @@ cache_writeback(void)
 	struct cache* cache;
 	
 	cache_runbit = false;
-	
-	lock_acquire(&cache_lock);
 
+	lock_acquire(&cache_lock);
 	while(!list_empty(&cache_list))
 	{
 		cache = list_entry(list_pop_front(&cache_list), struct cache, elem);
@@ -225,7 +229,6 @@ cache_writeback(void)
 		list_remove(&cache->elem);
 		free(cache);
 	}
-	
 	lock_release(&cache_lock);
 }
 
@@ -241,18 +244,18 @@ flush_cache(void* aux UNUSED)
 	while(cache_runbit)
 	{
 		lock_acquire(&cache_lock);
-
 		for(e = list_begin(&cache_list); e != list_end(&cache_list); 
 				e = list_next(e))
 		{
 			cache = list_entry(e, struct cache, elem);
 			if(cache->dirty)
 			{
+				lock_acquire(&cell_lock[cache->bufpos]);
 				block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
 				cache->dirty = false;
+				lock_release(&cell_lock[cache->bufpos]);
 			}
 		}
-
 		lock_release(&cache_lock);
 
 		timer_sleep(CACHE_FLUSH_INTERVAL);
@@ -282,12 +285,10 @@ fetch_block(void* aux)
 	block_sector_t* sector = aux;
 
 	lock_acquire(&cache_lock);
-
 	/* Get buffer cache metadata */
 	cache = scan_cache(*sector);
 	if(cache == NULL)
-		allocate_cache(*sector);
-
+		cache = allocate_cache(*sector);
 	lock_release(&cache_lock);
 
 	free(sector);
