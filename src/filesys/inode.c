@@ -192,10 +192,11 @@ inode_close (struct inode *inode)
 	lock_acquire(&inode->lock);
   if (--inode->open_cnt == 0)
     {
-      /* Remove from inode list and release lock. */
-      list_remove (&inode->elem);
 			lock_release(&inode->lock);
- 
+      
+			/* Remove from inode list and release lock. */
+      list_remove (&inode->elem);
+
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
@@ -262,10 +263,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
 			/* Project4 S */
 			/* Read sector with buffer cache */
-			cache_read(sector_idx, buffer + bytes_read, chunk_size, sector_ofs);
-
-			/* Install next block */
-			cache_install(next_sector);
+			cache_read(sector_idx, buffer + bytes_read, 
+								 chunk_size, sector_ofs, next_sector);
 			/* Project4 E */
 
       /* Advance. */
@@ -317,10 +316,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
 			/* Project4 S */
 			/* Write into buffer cache */
-			cache_write(sector_idx, buffer + bytes_written, chunk_size, sector_ofs);
-
-			/* Install next block */
-			cache_install(next_sector);
+			cache_write(sector_idx, buffer + bytes_written, 
+									chunk_size, sector_ofs, next_sector);
 			/* Project4 E */
 
       /* Advance. */

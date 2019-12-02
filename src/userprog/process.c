@@ -177,9 +177,14 @@ process_exit (void)
 	struct process* proc = cur->process;
 
 	/* Project3 S */
-	/* Free mmap resource */
 	if(proc != NULL)
+	{
+		printf("%s: exit(%d)\n", thread_name(), proc->status);
+		/* Free mmap resource */
 		mmap_destroy();
+		/* Collapse fd structs */
+		fd_collapse();
+	}
 
 	/* Close Load file for execution */
 	file = thread_current()->loadfile;
@@ -206,9 +211,6 @@ process_exit (void)
 
 	if(proc != NULL)
 	{
-		printf("%s: exit(%d)\n", thread_name(), proc->status);
-		/* Collapse fd structs */
-		fd_collapse();
 		/* Mark as exited */
 		proc->isexited = true;
 		/* Signal to parent */
