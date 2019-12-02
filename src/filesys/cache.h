@@ -8,8 +8,9 @@
 struct cache
 {
 	block_sector_t sector;	/* Cached disk sector */
-	unsigned bufpos;				/* Cached position in buffer cache */
-	bool dirty;							/* Dirty bit */
+	unsigned bufpos;		/* Cached position in buffer cache */
+	bool dirty;				/* Dirty bit */
+	bool ref;				/* Reference bit */
 	struct list_elem elem;	/* List element */
 };
 

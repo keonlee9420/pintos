@@ -72,6 +72,9 @@ cache_read(block_sector_t sector, uint8_t* buffer,
 	lock_release(&cache_lock);
 	lock_acquire(&cell_lock[cache->bufpos]);
 
+  /* Mark referenced */
+  cache->ref = true;
+
 	/* Read from buffer cache into BUFFER */
 	memcpy(buffer, bufpos_to_addr(cache->bufpos) + ofs, size);
 	lock_release(&cell_lock[cache->bufpos]);
@@ -93,6 +96,9 @@ cache_write(block_sector_t sector, const uint8_t* buffer,
 
 	lock_release(&cache_lock);
 	lock_acquire(&cell_lock[cache->bufpos]);
+
+  /* Mark referenced */
+  cache->ref = true;
 
 	/* Mark as dirty */
 	cache->dirty = true;
@@ -116,7 +122,7 @@ allocate_cache(block_sector_t sector, block_sector_t next_sector)
 	ASSERT(lock_held_by_current_thread(&cache_lock));
 	
 	cache_pos = bitmap_scan_and_flip(cache_bmap, 0, 1, false);
-	
+ 
 	/* Evict if cache is full */
 	if(cache_pos == BITMAP_ERROR)
 		cache = evict_cache();
@@ -126,6 +132,7 @@ allocate_cache(block_sector_t sector, block_sector_t next_sector)
 		cache->bufpos = cache_pos;
 	}
 	cache->dirty = false;
+  cache->ref = true;
 	cache->sector = sector;
 	lock_acquire(&cell_lock[cache->bufpos]);
 	block_read(fs_device, sector, bufpos_to_addr(cache->bufpos));
@@ -138,22 +145,43 @@ allocate_cache(block_sector_t sector, block_sector_t next_sector)
 }
 
 /* Return position of block evicted.
+   The evict policy is along with second chance algorithm.
 	 Write back to disk when block content is dirty. */
 static struct cache* 
 evict_cache(void)
 {
 	struct cache* cache;	
+  struct list_elem* e;
 
 	ASSERT(bitmap_all(cache_bmap, 0, MAX_CACHE_SIZE));
 	ASSERT(list_size(&cache_list) == MAX_CACHE_SIZE);
 	ASSERT(lock_held_by_current_thread(&cache_lock));
 
-	/* 이 부분에서 evict policy 바꾸면서 해봐도 될 꺼같음 */
-	cache = list_entry(list_pop_front(&cache_list), struct cache, elem);
-	lock_acquire(&cell_lock[cache->bufpos]);
-	if(cache->dirty)
-		block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
-	lock_release(&cell_lock[cache->bufpos]);
+  /* Iterate on each elemt unless we find proper victim */
+  e = list_begin(&cache_list);
+  while(true)
+  {
+    if(e == list_end(&cache_list))
+      e = list_begin(&cache_list);
+    cache = list_entry(e, struct cache, elem);
+
+    /* If the buffer cache is recently accessed, then move on to the next cache */
+    if(cache->ref)
+    {
+      cache->ref = false;
+      /* Advance */
+      e = list_next (e);
+      continue;
+    }
+
+    /* Write behind */
+    lock_acquire(&cell_lock[cache->bufpos]);
+    if(cache->dirty)
+      block_write(fs_device, cache->sector, bufpos_to_addr(cache->bufpos));
+    lock_release(&cell_lock[cache->bufpos]);
+
+    break;
+  }
 
 	return cache;
 }
