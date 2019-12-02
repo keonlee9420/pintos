@@ -174,6 +174,8 @@ evict_cache(void)
       continue;
     }
 
+		list_remove(&cache->elem);
+
     /* Write behind */
     lock_acquire(&cell_lock[cache->bufpos]);
     if(cache->dirty)
