@@ -236,6 +236,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     {
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      /* Project4 S */
+      block_sector_t sector_idx_next = byte_to_sector (inode, offset + BLOCK_SECTOR_SIZE);
+      /* Project4 E */
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -250,7 +253,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       /* Project4 S */
       /* Read from cache */
-      cache_read(sector_idx, buffer + bytes_read, chunk_size, sector_ofs);
+      cache_read(sector_idx, sector_idx_next, buffer + bytes_read, chunk_size, sector_ofs);
       /* Project4 E */
       
       /* Advance. */
@@ -283,6 +286,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     {
       /* Sector to write, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      /* Project4 S */
+      block_sector_t sector_idx_next = byte_to_sector (inode, offset + BLOCK_SECTOR_SIZE);
+      /* Project4 E */
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -297,7 +303,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
       /* Project4 S */
       /* Write on cache */
-      cache_write(sector_idx, buffer + bytes_written, chunk_size, sector_ofs);
+      cache_write(sector_idx, sector_idx_next, buffer + bytes_written, chunk_size, sector_ofs);
       /* Project4 E */
 
       /* Advance. */
@@ -327,9 +333,9 @@ inode_deny_write (struct inode *inode)
 void
 inode_allow_write (struct inode *inode) 
 {
-	lock_acquire (&inode->lock);
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
+	lock_acquire (&inode->lock);
   inode->deny_write_cnt--;
 	lock_release (&inode->lock);
 }

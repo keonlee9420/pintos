@@ -28,7 +28,7 @@ struct buffer_cache
 
 void buffer_cache_init (void);
 void buffer_cache_close (void);
-void cache_read (block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs);
-void cache_write (block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs);
+void cache_read (block_sector_t sector, block_sector_t next_sector, uint8_t* buffer, size_t size, off_t ofs);
+void cache_write (block_sector_t sector, block_sector_t next_sector, const uint8_t* buffer, size_t size, off_t ofs);
 
 #endif /* filesys/cache.h */

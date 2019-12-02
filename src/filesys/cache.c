@@ -22,7 +22,7 @@ static void setup_cache (struct buffer_cache* bc, block_sector_t sector, unsigne
 static struct buffer_cache* evict (block_sector_t sector);
 static struct buffer_cache* caching (block_sector_t sector);
 static struct buffer_cache* find_cache (block_sector_t sector);
-static struct buffer_cache* look_up_cache (block_sector_t sector);
+static struct buffer_cache* look_up_cache (block_sector_t sector, block_sector_t next_sector);
 static void cache_flush (void *aux UNUSED);
 static void write_back (bool close);
 static void cache_read_ahead (void *aux);
@@ -91,7 +91,7 @@ evict (block_sector_t sector)
   /* Iterate on each elemt unless we find proper victim */
   while (true)
   {
-    if(e == list_end (&buffer_cache_list))
+    if (e == list_end (&buffer_cache_list))
       e = list_begin (&buffer_cache_list);
     bc = list_entry (e, struct buffer_cache, elem);
 
@@ -163,7 +163,7 @@ find_cache (block_sector_t sector)
     Cache new sector data if there is no previous one. 
     Return the found/new cache. */
 static struct buffer_cache*
-look_up_cache (block_sector_t sector)
+look_up_cache (block_sector_t sector, block_sector_t next_sector)
 {
   struct buffer_cache* bc;
 
@@ -177,16 +177,14 @@ look_up_cache (block_sector_t sector)
   {
     bc = caching (sector);
     lock_release (&cache_system_lock);
-    // printf ("[load] tid=%d sector=%d\n", thread_current ()->tid, sector);
 
     /* Read ahead */
-    read_next_block_ahead (sector);
+    read_next_block_ahead (next_sector);
   } 
   else 
   {
     lock_release (&cache_system_lock);
     sema_up (&cache_read_ahead_sema);
-    // printf ("[only read] tid=%d sector=%d\n", thread_current ()->tid, sector);
   }
 
   return bc;
@@ -194,10 +192,10 @@ look_up_cache (block_sector_t sector)
 
 /* Read from cache with sector data */
 void
-cache_read (block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
+cache_read (block_sector_t sector, block_sector_t next_sector, uint8_t* buffer, size_t size, off_t ofs)
 {
   struct buffer_cache* bc;
-  bc = look_up_cache (sector);
+  bc = look_up_cache (sector, next_sector);
   
   lock_acquire (&cache_locks[bc->offset]);
 
@@ -213,10 +211,10 @@ cache_read (block_sector_t sector, uint8_t* buffer, size_t size, off_t ofs)
 
 /* Write on cache with sector data */
 void
-cache_write (block_sector_t sector, const uint8_t* buffer, size_t size, off_t ofs)
+cache_write (block_sector_t sector, block_sector_t next_sector, const uint8_t* buffer, size_t size, off_t ofs)
 {
   struct buffer_cache* bc;
-  bc = look_up_cache (sector);
+  bc = look_up_cache (sector, next_sector);
 
   lock_acquire (&cache_locks[bc->offset]);
 
@@ -257,7 +255,7 @@ write_back (bool close)
   /* Iterate on buffer cache list and write dirty cache back to disk */
   while (true)
   {
-    if(e == list_end (&buffer_cache_list))
+    if (e == list_end (&buffer_cache_list))
       break;
 
     /* Write dirty cache back to disk */
@@ -295,7 +293,6 @@ cache_read_ahead (void *aux)
   /* Caching */
   if (!find_cache (sector))
     caching (sector);
-    // printf ("[load next] tid=%d sector=%d\n", thread_current ()->tid, sector);
   
   lock_release (&cache_system_lock);
 
@@ -309,8 +306,14 @@ cache_read_ahead (void *aux)
 static void
 read_next_block_ahead (block_sector_t sector)
 {
+  if (sector == UINT32_MAX)
+  {
+    sema_up (&cache_read_ahead_sema);
+    return;
+  }
+
   block_sector_t* aux = malloc (sizeof (block_sector_t));
-  *aux = sector + 1;
+  *aux = sector;
 
   /* Read the next block */
   thread_create ("cache_read_ahead", 0, cache_read_ahead, aux);
