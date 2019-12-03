@@ -4,6 +4,9 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
+/* Project4 S */
+#include "threads/malloc.h"
+/* Project4 E */
 
 static struct file *free_map_file;   /* Free map file. */
 static struct bitmap *free_map;      /* Free map, one bit per sector. */
@@ -19,35 +22,62 @@ free_map_init (void)
   bitmap_mark (free_map, ROOT_DIR_SECTOR);
 }
 
-/* Allocates CNT consecutive sectors from the free map and stores
-   the first into *SECTORP.
-   Returns true if successful, false if not enough consecutive
+/* Project4 S */
+/* Allocates CNT sectors from the free map and stores
+   all indices(all aloocated sector numbers) into SECTORS.
+   Returns SECTORS if successful, NULL if not enough
    sectors were available or if the free_map file could not be
-   written. */
-bool
-free_map_allocate (size_t cnt, block_sector_t *sectorp)
+   written. 
+   The caller must free SECTORS after using it. */
+block_sector_t*
+free_map_allocate (size_t cnt)
 {
-  block_sector_t sector = bitmap_scan_and_flip (free_map, 0, cnt, false);
-  if (sector != BITMAP_ERROR
+  size_t i;
+  bool success = true;
+  block_sector_t* sectors = (block_sector_t*)malloc (sizeof (block_sector_t) * cnt);
+  
+  for (i = 0; i < cnt; i++)
+  {
+    block_sector_t sector = bitmap_scan_and_flip (free_map, 0, 1, false);
+    if (sector != BITMAP_ERROR
       && free_map_file != NULL
       && !bitmap_write (free_map, free_map_file))
     {
-      bitmap_set_multiple (free_map, sector, cnt, false); 
       sector = BITMAP_ERROR;
     }
-  if (sector != BITMAP_ERROR)
-    *sectorp = sector;
-  return sector != BITMAP_ERROR;
+    if (sector != BITMAP_ERROR)
+      sectors[i] = sector;
+    else
+    {
+      success = false;
+      break;
+    }
+  }
+
+  /* If fails, release resources and return NULL. */
+  if (!success)
+  {
+    size_t j;
+    for (j = 0; j <= i; j++)
+    {
+      bitmap_reset (free_map, sectors[j]);
+      free (sectors);
+    }
+    return NULL;
+  }
+
+  return sectors;
 }
 
-/* Makes CNT sectors starting at SECTOR available for use. */
+/* Makes a SECTOR available for use. */
 void
-free_map_release (block_sector_t sector, size_t cnt)
+free_map_release (block_sector_t sector)
 {
-  ASSERT (bitmap_all (free_map, sector, cnt));
-  bitmap_set_multiple (free_map, sector, cnt, false);
+  ASSERT (bitmap_all (free_map, sector, 1));
+  bitmap_set_multiple (free_map, sector, 1, false);
   bitmap_write (free_map, free_map_file);
 }
+/* Project4 E */
 
 /* Opens the free map file and reads it from disk. */
 void

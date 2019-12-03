@@ -11,7 +11,9 @@ void free_map_create (void);
 void free_map_open (void);
 void free_map_close (void);
 
-bool free_map_allocate (size_t, block_sector_t *);
-void free_map_release (block_sector_t, size_t);
+/* Project4 S */
+block_sector_t* free_map_allocate (size_t cnt);
+void free_map_release (block_sector_t);
+/* Project4 E */
 
 #endif /* filesys/free-map.h */

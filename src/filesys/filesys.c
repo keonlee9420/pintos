@@ -7,6 +7,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 /* Project4 S */
+#include "threads/malloc.h"
 #include "filesys/cache.h"
 /* Project4 E */
 
@@ -55,19 +56,23 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size, bool isdir) 
 {
-  block_sector_t inode_sector = 0;
+  /* Project4 S */
 	char filename[NAME_MAX + 1];
   struct dir *dir = dir_open_cur ();
+  block_sector_t* allocated_sectors = free_map_allocate(1);
+  block_sector_t inode_sector = allocated_sectors[0];
 	block_sector_t parent_sector = inode_get_inumber(dir_get_inode(dir));
   bool success = (dir != NULL
-									/* Project4 S */
 									&& dir_chdir(&dir, name, filename)
-									/* Project4 E */
-                  && free_map_allocate (1, &inode_sector)
+                  && allocated_sectors
                   && inode_create (inode_sector, initial_size, parent_sector)
                   && dir_add (dir, filename, inode_sector, isdir));
   if (!success && inode_sector != 0) 
-    free_map_release (inode_sector, 1);
+  {
+    free_map_release (inode_sector);
+  }
+  free (allocated_sectors);
+  /* Project4 E */
   dir_close (dir);
 
   return success;
