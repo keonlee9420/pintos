@@ -9,11 +9,9 @@
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
 #include "devices/timer.h"
-/* For Debugging */
-#include <stdio.h>
 
 #define MAX_CACHE_SIZE 64
-#define CACHE_FLUSH_INTERVAL 10
+#define CACHE_FLUSH_INTERVAL 100
 
 static struct list cache_list;
 static void* buffer_cache;
@@ -102,6 +100,7 @@ cache_write(block_sector_t sector, const uint8_t* buffer,
 
 	/* Mark as dirty */
 	cache->dirty = true;
+	cache->ref = true;
 
 	/* Write BUFFER data into buffer cache */
 	memcpy(bufpos_to_addr(cache->bufpos) + ofs, buffer, size);	
@@ -134,6 +133,7 @@ allocate_cache(block_sector_t sector, block_sector_t next_sector)
 	cache->dirty = false;
   cache->ref = true;
 	cache->sector = sector;
+	cache->ref = false;
 	lock_acquire(&cell_lock[cache->bufpos]);
 	block_read(fs_device, sector, bufpos_to_addr(cache->bufpos));
 	lock_release(&cell_lock[cache->bufpos]);
