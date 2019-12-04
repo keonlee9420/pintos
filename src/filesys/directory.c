@@ -26,6 +26,7 @@ struct dir_entry
     bool in_use;                        /* In use or free? */
 		/* Project4 S */
 		bool isdir;													/* Directory or file? */
+		block_sector_t parent_sector;				/* Parent inode sector */
 		/* Project4 E */
   };
 
@@ -34,7 +35,7 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), 0);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -88,6 +89,8 @@ dir_close (struct dir *dir)
 struct inode *
 dir_get_inode (struct dir *dir) 
 {
+	if(dir == NULL)
+		return NULL;
   return dir->inode;
 }
 
@@ -162,7 +165,10 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector, bool is
   ASSERT (name != NULL);
 
   /* Check NAME for validity. */
-  if (*name == '\0' || strlen (name) > NAME_MAX)
+	/* Project4 S */
+  if (*name == '\0' || strlen (name) > NAME_MAX || 
+			!strcmp(name, "..") || !strcmp(name, "."))
+	/* Project4 E */
     return false;
 
   /* Check that NAME is not in use. */
@@ -208,6 +214,10 @@ dir_remove (struct dir *dir, const char *name)
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
+	/* Reject root removal */
+	if(!strcmp(name, "/"))
+		return false;
+
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
@@ -216,6 +226,20 @@ dir_remove (struct dir *dir, const char *name)
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
+
+	/* Project4 S */
+	/* Check validity of directory entry */
+	if(e.isdir)
+	{
+		struct dir* edir = dir_open(inode);
+		char temp[NAME_MAX + 1];
+		if(dir_readdir(edir, temp))
+		{
+			dir_close(edir);
+			return false;
+		}
+	}
+	/* Project4 E */
 
   /* Erase directory entry. */
   e.in_use = false;
@@ -303,6 +327,22 @@ dir_chdir(struct dir** dir, const char* name, char* filename)
 		/* Validate next path */
 		if(strlen(next) > NAME_MAX)
 			break;
+
+		/* Handle commands: ./.. */
+		if(!strcmp(path, "."))
+		{
+			path = next;
+			continue;
+		}
+
+		if(!strcmp(path, ".."))
+		{
+			block_sector_t parent = inode_get_parent(dir_get_inode(cur_dir));
+			dir_close(cur_dir);
+			cur_dir = dir_open(inode_open(parent));
+			path = next;
+			continue;
+		}
 
 		/* Verify directory PATH (Must exist) */
 		if(!lookup(cur_dir, path, &e, NULL) || !e.in_use || !e.isdir)

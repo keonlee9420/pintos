@@ -58,12 +58,13 @@ filesys_create (const char *name, off_t initial_size, bool isdir)
   block_sector_t inode_sector = 0;
 	char filename[NAME_MAX + 1];
   struct dir *dir = dir_open_cur ();
+	block_sector_t parent_sector = inode_get_inumber(dir_get_inode(dir));
   bool success = (dir != NULL
 									/* Project4 S */
 									&& dir_chdir(&dir, name, filename)
 									/* Project4 E */
                   && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
+                  && inode_create (inode_sector, initial_size, parent_sector)
                   && dir_add (dir, filename, inode_sector, isdir));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
@@ -81,10 +82,16 @@ void*
 filesys_open (const char *name, bool* isdir)
 {
 	char filename[NAME_MAX + 1];
-  struct dir *dir = dir_open_cur ();
+  struct dir *dir;
   struct inode *inode = NULL;
 
 	/* Project4 S */
+	/* Handle opening root directory */
+	if(!strcmp(name, "/"))
+		return dir_open(inode_open(ROOT_DIR_SECTOR));
+
+	dir = dir_open_cur();
+	/* Travel file path */
 	if(!dir_chdir(&dir, name, filename))
 		return NULL;
 	/* Project4 E */
@@ -107,12 +114,18 @@ bool
 filesys_remove (const char *name) 
 {
 	char filename[NAME_MAX + 1];
-  struct dir *dir = dir_open_cur ();
-  bool success = dir != NULL
-								 /* Project4 S */
-								 && dir_chdir(&dir, name, filename) 
-								 /* Project4 E */ 
-								 && dir_remove (dir, filename);
+	/* Project4 S */
+  struct dir *dir;
+  bool success;
+	
+	if(!strcmp(name, "/"))
+		return false;
+	
+	dir = dir_open_cur();
+	success = dir != NULL
+						&& dir_chdir(&dir, name, filename) 
+						&& dir_remove (dir, filename);
+	/* Project4 E */ 
   dir_close (dir); 
 
   return success;

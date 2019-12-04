@@ -73,8 +73,10 @@ void
 free_map_create (void) 
 {
   /* Create inode. */
-  if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map)))
+	/* Project4 S */
+  if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map), 0))
     PANIC ("free map creation failed");
+	/* Project4 E */
 
   /* Write bitmap to file. */
   free_map_file = file_open (inode_open (FREE_MAP_SECTOR));

@@ -518,14 +518,25 @@ sys_munmap(mapid_t mapping)
 static bool 
 sys_chdir(const char* dir)
 {
-	struct dir* cur_dir = dir_open_cur();
+	struct thread* t = thread_current();
+	struct dir* cur_dir;
 	char dirname[NAME_MAX + 1];
 	struct inode* inode = NULL;
 	bool success;
 	bool isdir;
 
 	valid_string(dir);
+
+	/* If dir indicates only root '/', 
+		 direct root directory then exit */
+	if(!strcmp(dir, "/"))
+	{
+		dir_close(t->dir);
+		t->dir = dir_open_root();
+		return true;
+	}
 	
+	cur_dir = dir_open_cur();
 	success = dir_chdir(&cur_dir, dir, dirname) 
 						&& dir_lookup(cur_dir, dirname, &inode, &isdir)
 						&& isdir;
@@ -533,8 +544,8 @@ sys_chdir(const char* dir)
 	dir_close(cur_dir);
 	if(success)
 	{
-		dir_close(thread_current()->dir);
-		thread_current()->dir = dir_open(inode);
+		dir_close(t->dir);
+		t->dir = dir_open(inode);
 	}
 
 	return success;
@@ -544,7 +555,7 @@ static bool
 sys_mkdir(const char* dir)
 {
 	valid_string(dir);
-	return filesys_create(dir, 256, true);
+	return filesys_create(dir, 1024, true);
 }
 
 static bool 

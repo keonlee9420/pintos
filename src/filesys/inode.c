@@ -20,8 +20,11 @@ struct inode_disk
   {
     block_sector_t start;               /* First data sector. */
     off_t length;                       /* File size in bytes. */
+		/* Project4 S */
+		block_sector_t parent;							/* parent directory sector number */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    uint32_t unused[124];               /* Not used. */
+		/* Project4 E */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -83,7 +86,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -99,6 +102,9 @@ inode_create (block_sector_t sector, off_t length)
     {
       size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
+			/* Project4 S */
+			disk_inode->parent = parent_sector;
+			/* Project4 E */
       disk_inode->magic = INODE_MAGIC;
       if (free_map_allocate (sectors, &disk_inode->start)) 
         {
@@ -171,6 +177,9 @@ inode_reopen (struct inode *inode)
   if (inode != NULL)
 	/* Project4 S */
 	{
+		if(inode->removed)
+			return NULL;
+
 		lock_acquire(&inode->lock);
     inode->open_cnt++;
 		lock_release(&inode->lock);
@@ -183,6 +192,8 @@ inode_reopen (struct inode *inode)
 block_sector_t
 inode_get_inumber (const struct inode *inode)
 {
+	if(inode == NULL)
+		return -1;
   return inode->sector;
 }
 
@@ -389,3 +400,11 @@ inode_length (const struct inode *inode)
 {
   return inode->data.length;
 }
+
+/* Project4 S */
+block_sector_t 
+inode_get_parent(const struct inode* inode)
+{
+	return inode->data.parent;
+}
+/* Project4 E */
