@@ -298,7 +298,12 @@ inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
           block_write (fs_device, sector, disk_inode);
           success = true; 
         } 
-
+      /* If given file size is zero. */
+      else if (length == 0)
+        {
+          block_write (fs_device, sector, disk_inode);
+          success = true; 
+        }
       free (allocated_sectors);
       /* Project4 E */
       free (disk_inode);
