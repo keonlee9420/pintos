@@ -19,6 +19,7 @@
 /* Max size of on-disk inode in sectors. */
 #define INODE_TOTAL_SECTOR_NUM 16524
 const int inode_total_sector_num = 16524;
+const int block_sector_size = 512;
 
 /* Max number of int-size(4 bytes) elements in a single sector. */
 #define INT_PER_SECTOR 128
@@ -64,7 +65,9 @@ struct inode_disk_double
   };
 
 static void inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_sector_t* allocated_sectors, block_sector_t reserved_sector);
+static void inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity);
 static block_sector_t index_to_sector (const struct inode_disk* inode_disk, off_t indexed_sector);
+static int check_extensible (off_t offset, off_t size);
 /* Project4 E */
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -182,7 +185,7 @@ inode_init (void)
 }
 
 /* Project4 S */
-/* Insert data into inode disk */
+/* Create sectors into inode disk. */
 static void
 inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_sector_t* allocated_sectors, block_sector_t reserved_sector)
 {
@@ -254,7 +257,6 @@ inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_
   /* Free resources */
   free (single_indirect);
   free (double_indirect);
-
 }
 /* Project4 E */
 
@@ -501,6 +503,110 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   return bytes_read;
 }
 
+/* Project4 S */
+/* Extend inode to MAX_CAPACITY. */
+static void
+inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity)
+{
+  ASSERT (disk_inode != NULL);
+  ASSERT (max_capacity > 0 && max_capacity <= INODE_TOTAL_SECTOR_NUM);
+  
+  static char zeros[BLOCK_SECTOR_SIZE];
+
+  /* Allocate memory for single and double indirect of DISK_INODE. */
+  struct inode_disk_single* single_indirect = malloc (sizeof (struct inode_disk_single));
+  struct inode_disk_double* double_indirect = malloc (sizeof (struct inode_disk_double));
+
+  size_t i;
+  int single_indirect_index = 0;
+  const size_t END_OF_INODE = max_capacity - 1;
+  for (i = 0; i < max_capacity; i++)
+  {
+    if (i < INODE_END_OF_DIRECT)
+    {
+      /* Load existing sector. */
+      disk_inode->direct_sectors[i] = index_to_sector (disk_inode, i);
+      if (disk_inode->direct_sectors[i] == -1)
+      {
+        /* Allocate if empty. */
+        disk_inode->direct_sectors[i] = free_map_allocate (-1);
+        block_write (fs_device, disk_inode->direct_sectors[i], zeros);
+      }
+    }
+    else if (i >= INODE_END_OF_DIRECT && i < INODE_END_OF_SINGLE)
+    {
+      /* Load existing sector. */
+      single_indirect->direct_sectors[i - inode_end_of_direct] = index_to_sector (disk_inode, i);
+      if (single_indirect->direct_sectors[i - inode_end_of_direct] == -1)
+      {
+        /* Allocate if empty. */
+        single_indirect->direct_sectors[i - inode_end_of_direct] = free_map_allocate (-1);
+        block_write (fs_device, single_indirect->direct_sectors[i - inode_end_of_direct], zeros);
+      }
+
+      /* Block write single indirect at the end. */
+      if (i == END_OF_INODE || (i == inode_end_of_single - 1))
+      {
+        block_write (fs_device, disk_inode->single_indirect, single_indirect);
+
+        /* Empty single indirect. */
+        memset (&single_indirect->direct_sectors, -1, sizeof(single_indirect->direct_sectors));
+      }
+    }
+    else
+    {
+      int index = i - inode_end_of_single + (single_indirect_index * int_per_sector);
+      /* Load existing sector. */
+      single_indirect->direct_sectors[index] = index_to_sector (disk_inode, i);
+      if (single_indirect->direct_sectors[index] == -1)
+      {
+        /* Allocate if empty. */
+        single_indirect->direct_sectors[index] = free_map_allocate (-1);
+        block_write (fs_device, single_indirect->direct_sectors[index], zeros);
+      }
+
+      /* Block write after the current single indirect full. */
+      if ((i == END_OF_INODE) || ((((int)i - inode_end_of_single + 1) / int_per_sector)  == (single_indirect_index + 1)))
+      {
+        /* Block write and attach to double indirect. */
+        double_indirect->single_indirects[single_indirect_index] = free_map_allocate (-1);
+        block_write (fs_device, double_indirect->single_indirects[single_indirect_index], single_indirect);
+        
+        /* Empty single indirect. */
+        memset (&single_indirect->direct_sectors, -1, sizeof(single_indirect->direct_sectors));
+
+        /* Advacne. */
+        single_indirect_index++;
+
+        if (i == END_OF_INODE)
+        {
+          /* Block write double indirect at the end. */
+          block_write (fs_device, disk_inode->double_indirect, double_indirect);
+        }
+      }      
+    }    
+  }
+
+  /* Free resources */
+  free (single_indirect);
+  free (double_indirect);
+}
+
+/* Check whether it's possible to extend the inode. 
+   Return MAX_CAPACITY when the inode can be extended from OFFSET in SIZE long. 
+   Return -1, otherwise. */
+static int
+check_extensible (off_t offset, off_t size)
+{
+  int over_ofs = (offset + size) % block_sector_size;
+  int over = (offset + size) / block_sector_size;
+  int max_capacity = over_ofs ? over + 1 : over;
+  if (max_capacity > inode_total_sector_num)
+    return -1;
+  return max_capacity;
+}
+/* Project4 E */
+
 /* Writes SIZE bytes from BUFFER into INODE, starting at OFFSET.
    Returns the number of bytes actually written, which may be
    less than SIZE if end of file is reached or an error occurs.
@@ -538,7 +644,23 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       /* Number of bytes to actually write into this sector. */
       int chunk_size = size < min_left ? size : min_left;
       if (chunk_size <= 0)
-        break;
+      {
+        int max_capacity;
+        /* Check whether it's possible to extend the inode. */
+        if ((max_capacity = check_extensible (offset, size)) > 0)
+        {
+          /* Extend the inode. */
+          inode_disk_extend (&inode->data, max_capacity);
+  
+          /* Update meta data. */
+          inode->data.size = max_capacity;
+          inode->data.length += size;
+          block_write (fs_device, inode->sector , &inode->data);
+          continue;
+        }
+        else
+          break;
+      } 
 
 			/* Project4 S */
 			/* Write into buffer cache */

@@ -59,19 +59,17 @@ filesys_create (const char *name, off_t initial_size, bool isdir)
   /* Project4 S */
 	char filename[NAME_MAX + 1];
   struct dir *dir = dir_open_cur ();
-  block_sector_t* allocated_sectors = free_map_allocate(1);
-  block_sector_t inode_sector = allocated_sectors[0];
 	block_sector_t parent_sector = inode_get_inumber(dir_get_inode(dir));
+  block_sector_t inode_sector = free_map_allocate(-1);
   bool success = (dir != NULL
 									&& dir_chdir(&dir, name, filename)
-                  && allocated_sectors
+                  && inode_sector
                   && inode_create (inode_sector, initial_size, parent_sector)
                   && dir_add (dir, filename, inode_sector, isdir));
-  if (!success && inode_sector != 0) 
+  if (!success) 
   {
     free_map_release (inode_sector);
   }
-  free (allocated_sectors);
   /* Project4 E */
   dir_close (dir);
 
