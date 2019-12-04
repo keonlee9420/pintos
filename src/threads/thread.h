@@ -113,6 +113,12 @@ struct thread
 #endif
 		/* Project3 E */
 
+		/* Project4 S */
+#ifdef FILESYS
+		struct dir* dir;										/* Current directory */
+#endif
+		/* Project4 E */
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

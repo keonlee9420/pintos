@@ -5,6 +5,11 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+/* Project4 S */
+#include "threads/thread.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+/* Project4 E */
 
 /* A directory. */
 struct dir 
@@ -19,6 +24,9 @@ struct dir_entry
     block_sector_t inode_sector;        /* Sector number of header. */
     char name[NAME_MAX + 1];            /* Null terminated file name. */
     bool in_use;                        /* In use or free? */
+		/* Project4 S */
+		bool isdir;													/* Directory or file? */
+		/* Project4 E */
   };
 
 /* Creates a directory with space for ENTRY_CNT entries in the
@@ -117,7 +125,7 @@ lookup (const struct dir *dir, const char *name,
    a null pointer.  The caller must close *INODE. */
 bool
 dir_lookup (const struct dir *dir, const char *name,
-            struct inode **inode) 
+            struct inode **inode, bool* isdir) 
 {
   struct dir_entry e;
 
@@ -125,7 +133,12 @@ dir_lookup (const struct dir *dir, const char *name,
   ASSERT (name != NULL);
 
   if (lookup (dir, name, &e, NULL))
+	{
     *inode = inode_open (e.inode_sector);
+		/* Project4 S */
+		*isdir = e.isdir;
+		/* Project4 E */
+	}
   else
     *inode = NULL;
 
@@ -139,7 +152,7 @@ dir_lookup (const struct dir *dir, const char *name,
    Fails if NAME is invalid (i.e. too long) or a disk or memory
    error occurs. */
 bool
-dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
+dir_add (struct dir *dir, const char *name, block_sector_t inode_sector, bool isdir)
 {
   struct dir_entry e;
   off_t ofs;
@@ -172,6 +185,9 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   e.in_use = true;
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
+	/* Project4 S */
+	e.isdir = isdir;
+	/* Project4 E */
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
  done:
@@ -234,3 +250,82 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
     }
   return false;
 }
+
+/* Project4 S */
+/* Change working directory according to given name
+	 Change *DIR to one-step before destination file or directory. 
+	 Save destination file or directory name into FILENAME */
+bool 
+dir_chdir(struct dir** dir, const char* name, char* filename)
+{
+	struct dir* cur_dir = *dir;
+	char* name_cp; 
+	char* path; 
+	char* save_ptr = NULL;
+	bool success = false;
+
+	/* Verify input initial directory and input path */
+	if(cur_dir == NULL || strlen(name) == 0)
+		return false;
+
+	/* Copy entire path */
+	name_cp = palloc_get_page(PAL_ZERO);
+	if(name_cp == NULL)
+		return false;
+	strlcpy(name_cp, name, PGSIZE);
+
+	/* Change current directory into root if path is absolute */
+	if(name_cp[0] == '/')
+	{
+		dir_close(cur_dir);
+		cur_dir = dir_open_root();
+	}
+
+	/* Set initial path */
+	path = strtok_r(name_cp, "/", &save_ptr);
+	if(strlen(path) > NAME_MAX)
+		return false;
+
+	/* Traverse along the path */
+	while(path)
+	{
+		struct dir_entry e;
+		char* next = strtok_r(NULL, "/", &save_ptr);
+
+		/* Handle case when PATH is the one to be saved. */
+		if(next == NULL)
+		{
+			strlcpy(filename, path, NAME_MAX + 1);
+			success = true;
+			break;	
+		}
+
+		/* Validate next path */
+		if(strlen(next) > NAME_MAX)
+			break;
+
+		/* Verify directory PATH (Must exist) */
+		if(!lookup(cur_dir, path, &e, NULL) || !e.in_use || !e.isdir)
+			break;
+
+		/* Advance */
+		dir_close(cur_dir);
+		cur_dir = dir_open(inode_open(e.inode_sector));
+		path = next;
+	}
+
+	*dir = cur_dir;
+	palloc_free_page(name_cp);
+	return success;
+}
+
+struct dir* 
+dir_open_cur(void)
+{
+	struct thread* cur = thread_current();
+	if(cur->dir == NULL)
+		return dir_open_root();
+	else
+		return dir_reopen(cur->dir);
+}
+/* Project4 E */

@@ -29,7 +29,7 @@
 /* Project3 E */
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (void* args, void (**eip) (void), void **esp);
 /* Project2 S */
 static void pass_argument(const char* cmdline, void** esp);
 static void parse_title(char* title, const char* file_name);
@@ -59,6 +59,10 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+	/* Project4 S */
+	struct dir** dir;
+	void* arg;
+	/* Project4 E */
 	/* Project2 S */
 	char file_title[16];
 	
@@ -67,19 +71,25 @@ process_execute (const char *file_name)
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  arg = palloc_get_page (0);
+  if (arg == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+	
+	/* Project4 S */
+	dir = arg;
+	*dir = thread_current()->dir;
+	fn_copy = arg + 4;
+	
+  strlcpy (fn_copy, file_name, PGSIZE - 4);
 
   /* Create a new thread to execute FILE_NAME. */
 	/* Project2 S */
-  tid = thread_create (file_title, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_title, PRI_DEFAULT, start_process, arg);
 	
 	/* Return -1 if child thread not created */
 	if (tid == TID_ERROR)
 	{
-    palloc_free_page (fn_copy); 
+    palloc_free_page (arg); 
 		return -1;
 	}
 
@@ -97,7 +107,8 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+	void* args = file_name_;
+  char *file_name = file_name_ + 4;
   struct intr_frame if_;
   bool success;
 
@@ -107,10 +118,10 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 	/* Project2 S */
-  if((success = load (file_name, &if_.eip, &if_.esp)))
+  if((success = load (args, &if_.eip, &if_.esp)))
 		pass_argument(file_name, &if_.esp);
 
-  palloc_free_page (file_name);
+  palloc_free_page (args);
 	setup_child(success);
 	/* Project2 E */
 
@@ -191,6 +202,11 @@ process_exit (void)
 	if(file != NULL)
 		file_close(file);
 	/* Project3 E */
+
+	/* Project4 S */
+	if(cur->dir != NULL)
+		dir_close(cur->dir);
+	/* Project4 E */
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -308,7 +324,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (void* args, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -316,11 +332,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+	struct dir** dir = args;
+	bool isdir;
+	const char* file_name = args + 4;
 	/* Project2 S */
 	char file_title[16];
 
 	parse_title(file_title, file_name);
 	/* Project2 E */
+
+	/* Project4 S */
+	if(*dir != NULL)
+		t->dir = dir_reopen(*dir);
+	/* Project4 E */
 
 	/* Project3 S */
 	/* Allocate supplemental page table */
@@ -337,12 +361,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
 	/* Project2 S */
-	file = filesys_open (file_title);
+	file = filesys_open (file_title, &isdir);
 	/* Project2 E */
 	/* Project3 S */
 	thread_current()->loadfile = file;
 	/* Project3 E */
-  if (file == NULL) 
+  if (file == NULL || isdir) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 

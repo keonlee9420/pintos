@@ -40,7 +40,9 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-		struct lock lock;
+		/* Project4 S */
+		struct lock lock;										/* Inode usage synchronization */
+		/* Project4 E */
     struct inode_disk data;             /* Inode content. */
   };
 
@@ -61,14 +63,18 @@ byte_to_sector (const struct inode *inode, off_t pos)
 /* List of open inodes, so that opening a single inode twice
    returns the same `struct inode'. */
 static struct list open_inodes;
+/* Project4 S */
 static struct lock inodes_lock;
+/* Project4 E */
 
 /* Initializes the inode module. */
 void
 inode_init (void) 
 {
   list_init (&open_inodes);
+	/* Project4 S */
 	lock_init(&inodes_lock);
+	/* Project4 E */
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -122,7 +128,9 @@ inode_open (block_sector_t sector)
   struct inode *inode;
 
   /* Check whether this inode is already open. */
+	/* Project4 S */
 	lock_acquire(&inodes_lock);
+	/* Project4 E */
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
        e = list_next (e)) 
     {
@@ -130,7 +138,9 @@ inode_open (block_sector_t sector)
       if (inode->sector == sector) 
         {
           inode_reopen (inode);
+					/* Project4 S */
 					lock_release(&inodes_lock);
+					/* Project4 E */
           return inode; 
         }
     }
@@ -146,10 +156,11 @@ inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-	lock_init(&inode->lock);
   block_read (fs_device, inode->sector, &inode->data);
-
+	/* Project4 S */
+	lock_init(&inode->lock);
 	lock_release(&inodes_lock);
+	/* Project4 E */
   return inode;
 }
 
@@ -158,11 +169,13 @@ struct inode *
 inode_reopen (struct inode *inode)
 {
   if (inode != NULL)
+	/* Project4 S */
 	{
 		lock_acquire(&inode->lock);
     inode->open_cnt++;
 		lock_release(&inode->lock);
 	}
+	/* Project4 E */
   return inode;
 }
 
@@ -187,12 +200,14 @@ inode_close (struct inode *inode)
   if (inode == NULL)
     return;
 
+	/* Project4 S */
 	lock_acquire(&inodes_lock);
   /* Release resources if this was the last opener. */
 	lock_acquire(&inode->lock);
   if (--inode->open_cnt == 0)
     {
 			lock_release(&inode->lock);
+			/* Project4 S */
       
 			/* Remove from inode list and release lock. */
       list_remove (&inode->elem);
@@ -216,9 +231,11 @@ inode_close (struct inode *inode)
 
       free (inode); 
     }
+	/* Project4 S */
 	else
 		lock_release(&inode->lock);
 	lock_release(&inodes_lock);
+	/* Project4 E */
 }
 
 /* Marks INODE to be deleted when it is closed by the last caller who
@@ -239,7 +256,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
 
+	/* Project4 S */
 	lock_acquire(&inode->lock);
+	/* Project4 E */
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
@@ -272,7 +291,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       offset += chunk_size;
       bytes_read += chunk_size;
     }
+	/* Project4 S */
 	lock_release(&inode->lock);
+	/* Project4 E */
 
   return bytes_read;
 }
@@ -292,7 +313,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   if (inode->deny_write_cnt)
     return 0;
 
+	/* Project4 S */
 	lock_acquire(&inode->lock);
+	/* Project4 E */
   while (size > 0) 
     {
       /* Sector to write, starting byte offset within sector. */
@@ -325,7 +348,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       offset += chunk_size;
       bytes_written += chunk_size;
     }
+	/* Project4 S */
 	lock_release(&inode->lock);
+	/* Project4 E */
 
   return bytes_written;
 }
@@ -335,9 +360,11 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 void
 inode_deny_write (struct inode *inode) 
 {
+	/* Project4 S */
 	lock_acquire(&inode->lock);
   inode->deny_write_cnt++;
 	lock_release(&inode->lock);
+	/* Project4 E */
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
 }
 
@@ -347,11 +374,13 @@ inode_deny_write (struct inode *inode)
 void
 inode_allow_write (struct inode *inode) 
 {
+	/* Project4 S */
 	lock_acquire(&inode->lock);
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
 	lock_release(&inode->lock);
+	/* Project4 E */
 }
 
 /* Returns the length, in bytes, of INODE's data. */

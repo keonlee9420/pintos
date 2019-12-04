@@ -18,6 +18,7 @@ struct process
 
 	struct list filelist;
 	struct list maplist;
+
 	struct semaphore sema;
 	struct list_elem elem;
 };

@@ -37,10 +37,13 @@ fsutil_cat (char **argv)
   
   struct file *file;
   char *buffer;
+	/* Project4 S */
+	bool isdir;
 
   printf ("Printing '%s' to the console...\n", file_name);
-  file = filesys_open (file_name);
-  if (file == NULL)
+  file = filesys_open (file_name, &isdir);
+	/* Project4 E */
+  if (file == NULL || isdir)
     PANIC ("%s: open failed", file_name);
   buffer = palloc_get_page (PAL_ASSERT);
   for (;;) 
@@ -114,14 +117,17 @@ fsutil_extract (char **argv UNUSED)
       else if (type == USTAR_REGULAR)
         {
           struct file *dst;
+					bool isdir;
 
           printf ("Putting '%s' into the file system...\n", file_name);
 
           /* Create destination file. */
-          if (!filesys_create (file_name, size))
+					/* Project4 S */
+          if (!filesys_create (file_name, size, false))
             PANIC ("%s: create failed", file_name);
-          dst = filesys_open (file_name);
-          if (dst == NULL)
+          dst = filesys_open (file_name, &isdir);
+					/* Project4 E */
+          if (dst == NULL || isdir)
             PANIC ("%s: open failed", file_name);
 
           /* Do copy. */
@@ -173,6 +179,7 @@ fsutil_append (char **argv)
   struct file *src;
   struct block *dst;
   off_t size;
+	bool isdir;
 
   printf ("Appending '%s' to ustar archive on scratch device...\n", file_name);
 
@@ -182,8 +189,10 @@ fsutil_append (char **argv)
     PANIC ("couldn't allocate buffer");
 
   /* Open source file. */
-  src = filesys_open (file_name);
-  if (src == NULL)
+	/* Project4 S */
+  src = filesys_open (file_name, &isdir);
+	/* Project4 E */
+  if (src == NULL || isdir)
     PANIC ("%s: open failed", file_name);
   size = file_length (src);
 

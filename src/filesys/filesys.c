@@ -53,14 +53,18 @@ filesys_done (void)
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 bool
-filesys_create (const char *name, off_t initial_size) 
+filesys_create (const char *name, off_t initial_size, bool isdir) 
 {
   block_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
+	char filename[NAME_MAX + 1];
+  struct dir *dir = dir_open_cur ();
   bool success = (dir != NULL
+									/* Project4 S */
+									&& dir_chdir(&dir, name, filename)
+									/* Project4 E */
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, name, inode_sector));
+                  && dir_add (dir, filename, inode_sector, isdir));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
@@ -73,17 +77,26 @@ filesys_create (const char *name, off_t initial_size)
    otherwise.
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
-struct file *
-filesys_open (const char *name)
+void*
+filesys_open (const char *name, bool* isdir)
 {
-  struct dir *dir = dir_open_root ();
+	char filename[NAME_MAX + 1];
+  struct dir *dir = dir_open_cur ();
   struct inode *inode = NULL;
 
+	/* Project4 S */
+	if(!dir_chdir(&dir, name, filename))
+		return NULL;
+	/* Project4 E */
+
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+    dir_lookup (dir, filename, &inode, isdir);
   dir_close (dir);
 
-  return file_open (inode);
+	if(*isdir)
+		return dir_open(inode);
+	else
+  	return file_open (inode);
 }
 
 /* Deletes the file named NAME.
@@ -93,8 +106,13 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
+	char filename[NAME_MAX + 1];
+  struct dir *dir = dir_open_cur ();
+  bool success = dir != NULL
+								 /* Project4 S */
+								 && dir_chdir(&dir, name, filename) 
+								 /* Project4 E */ 
+								 && dir_remove (dir, filename);
   dir_close (dir); 
 
   return success;

@@ -2,18 +2,18 @@
 #define USERPROG_FD_H
 
 #include <list.h>
-#include "filesys/file.h"
 
 struct fd_data
 {
 	int fd;
-	struct file* file;
+	void* data;
+	bool isdir;
 	struct list_elem elem;
 };
 
-int fd_allocate(struct file* file);
-struct file* fd_get_file(int fd);
-struct file* fd_pop(int fd);
+int fd_allocate(void* data, bool isdir);
+bool fd_get_data(int fd, void** data);
+bool fd_pop(int fd, void** data);
 void fd_collapse(void);
 
 #endif /* userprog/fd.h */

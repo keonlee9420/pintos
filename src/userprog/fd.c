@@ -2,11 +2,13 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "userprog/process.h"
+#include "filesys/file.h"
+#include "filesys/directory.h"
 
 /* Allocate new file descriptor number 
 	 New fd must be greater than 2 */
 int 
-fd_allocate(struct file* file)
+fd_allocate(void* data, bool isdir)
 {
 	struct list* filelist = &thread_process()->filelist;
 	struct fd_data* fd_new;
@@ -15,14 +17,15 @@ fd_allocate(struct file* file)
 
 	fd_new = malloc(sizeof(struct fd_data));
 	fd_new->fd = fd;
-	fd_new->file = file;
+	fd_new->data = data;
+	fd_new->isdir = isdir;
 	list_push_back(filelist, &fd_new->elem);
 	
 	return fd;
 }
 
-struct file* 
-fd_get_file(int fd)
+bool 
+fd_get_data(int fd, void** data)
 {
 	struct list* filelist = &thread_process()->filelist;
 	struct list_elem* e;
@@ -32,17 +35,20 @@ fd_get_file(int fd)
 	{
 		struct fd_data* fd_data = list_entry(e, struct fd_data, elem);
 		if(fd_data->fd == fd)
-			return fd_data->file;
+		{
+			*data = fd_data->data;
+			return fd_data->isdir;
+		}
 	}
-	return NULL;
+	return true;
 }
 
-struct file* 
-fd_pop(int fd)
+bool 
+fd_pop(int fd, void** data)
 {
 	struct list* filelist = &thread_process()->filelist;
 	struct list_elem* e;
-	struct file* file;
+	bool isdir;
 	
 	for(e = list_begin(filelist); e != list_end(filelist); 
 			e = list_next(e))
@@ -50,13 +56,14 @@ fd_pop(int fd)
 		struct fd_data* fd_data = list_entry(e, struct fd_data, elem);
 		if(fd_data->fd == fd)
 		{
-			file = fd_data->file;
+			*data = fd_data->data;
+			isdir = fd_data->isdir;
 			list_remove(e);
 			free(fd_data);
-			return file;
+			return isdir;
 		}
 	}
-	return NULL;
+	return true;
 }
 
 void 
@@ -68,9 +75,11 @@ fd_collapse(void)
 	{
 		struct fd_data* fd_data = list_entry(list_pop_front(filelist), 
 																				 struct fd_data, elem);
-		file_close(fd_data->file);
+		if(fd_data->isdir)
+			dir_close(fd_data->data);
+		else
+			file_close(fd_data->data);
 		free(fd_data);
 	}
 }
-
 

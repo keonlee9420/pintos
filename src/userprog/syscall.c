@@ -20,6 +20,10 @@
 #include "userprog/pagedir.h"
 #include "vm/page.h"
 /* Project3 E */
+/* Project4 S */
+#include "filesys/directory.h"
+#include "filesys/inode.h"
+/* Project4 E */
 
 static void syscall_handler (struct intr_frame *);
 
@@ -40,11 +44,17 @@ static void sys_seek(int fd, unsigned position);
 static unsigned sys_tell(int fd);
 static void sys_close(int fd);
 /* Project2 E */
-
 /* Project3 S */
 static mapid_t sys_mmap(int fd, void* addr);
 static void sys_munmap(mapid_t mapping);
 /* Project3 E */
+/* Project4 S */
+static bool sys_chdir(const char* dir);
+static bool sys_mkdir(const char* dir);
+static bool sys_readdir(int fd, char* name);
+static bool sys_isdir(int fd);
+static int sys_inumber(int fd);
+/* Project4 E */
 
 void
 syscall_init (void) 
@@ -157,15 +167,36 @@ syscall_handler (struct intr_frame *f)
 		/* Project3 E */
 		/* Project4 S */
 		case SYS_CHDIR:
+		{
+			const char* dir = (const char*)read_stack(++esp);
+			f->eax = sys_chdir(dir);
 			break;
+		}
 		case SYS_MKDIR:
+		{
+			const char* dir = (const char*)read_stack(++esp);
+			f->eax = sys_mkdir(dir);
 			break;
+		}
 		case SYS_READDIR:
+		{
+			int fd = read_stack(++esp);
+			char* name = (char*)read_stack(++esp);
+			f->eax = sys_readdir(fd, name);
 			break;
+		}
 		case SYS_ISDIR:
+		{
+			int fd = read_stack(++esp);
+			f->eax = sys_isdir(fd);
 			break;
+		}
 		case SYS_INUMBER:
+		{
+			int fd = read_stack(++esp);
+			f->eax = sys_inumber(fd);
 			break;
+		}
 		default:
 			NOT_REACHED();
 	}
@@ -273,7 +304,7 @@ sys_create(const char* file, unsigned initial_size)
 {
 	valid_string(file);
 
-	return filesys_create(file, initial_size);
+	return filesys_create(file, initial_size, false);
 }
 
 static bool 
@@ -286,25 +317,25 @@ sys_remove(const char* file)
 static int 
 sys_open(const char* filename)
 {
-	struct file* file;
+	void* data;
+	bool isdir;
 
 	valid_string(filename);
 
-	if((file = filesys_open(filename)) == NULL)
+	if((data = filesys_open(filename, &isdir)) == NULL)
 		return -1;
 
-	if(!strcmp(thread_name(), filename))
-		file_deny_write(file);
+	if(!isdir && !strcmp(thread_name(), filename))
+		file_deny_write(data);
 
-	return fd_allocate(file);
+	return fd_allocate(data, isdir);
 }
 
 static int 
 sys_filesize(int fd)
 {
-	struct file* file = fd_get_file(fd);
-	
-	if(file == NULL)
+	void* file = NULL;
+	if(fd_get_data(fd, &file))
 		return 0;
 
 	return file_length(file);
@@ -329,15 +360,15 @@ sys_read(int fd, void* buffer, unsigned size)
 			return size;
 		}
 		case STDOUT_FILENO:
-			return 0;
+			return -1;
 		default:
 		{
 			unsigned readsize;
 			uint8_t* bytes;
-			struct file* file = fd_get_file(fd);
+			void* file;
 
-			if(file == NULL)
-				return 0;
+			if(fd_get_data(fd, &file))
+				return -1;
 
 			bytes = malloc(size);
 			readsize = file_read(file, bytes, size);
@@ -361,20 +392,18 @@ sys_write(int fd, const void* buffer, unsigned size)
 	switch(fd)
 	{
 		case STDIN_FILENO:
-			return 0;
+			return -1;
 		case STDOUT_FILENO:
 			valid_string(buffer);
 			putbuf(buffer, size);
 			return size;
 		default:
 		{
-			struct file* file = fd_get_file(fd);
-
-			if(file == NULL)
-				return 0;
+			void* file = NULL;
+			if(fd_get_data(fd, &file))
+				return -1;
 
 			valid_string(buffer);
-
 			return file_write(file, buffer, size);
 		}
 	}
@@ -383,9 +412,8 @@ sys_write(int fd, const void* buffer, unsigned size)
 static void 
 sys_seek(int fd, unsigned position)
 {
-	struct file* file = fd_get_file(fd);
-
-	if(file == NULL)
+	void* file = NULL;
+	if(fd_get_data(fd, &file))
 		return;
 
 	file_seek(file, position);
@@ -394,9 +422,8 @@ sys_seek(int fd, unsigned position)
 static unsigned 
 sys_tell(int fd)
 {
-	struct file* file = fd_get_file(fd);
-
-	if(file == NULL)
+	void* file = NULL;
+	if(fd_get_data(fd, &file))
 		return 0;
 
 	return file_tell(file);
@@ -405,12 +432,16 @@ sys_tell(int fd)
 static void 
 sys_close(int fd)
 {
-	struct file* file = fd_pop(fd);
+	void* data = NULL;
+	bool dir = fd_pop(fd, &data);
 
-	if(file == NULL)
+	if(data == NULL)
 		return;
 
-	file_close(file);
+	if(dir)
+		dir_close(data);
+	else
+		file_close(data);
 }
 /* Project2 E */
 
@@ -418,10 +449,10 @@ sys_close(int fd)
 static mapid_t 
 sys_mmap(int fd, void* addr)
 {
-	struct file* file;
 	size_t fsize;
 	off_t ofs;
 	unsigned i;
+	void* file = NULL;
 	void* upage = addr;
 
 	/* Check address validity: Non-null, page-aligned */
@@ -429,7 +460,7 @@ sys_mmap(int fd, void* addr)
 		return -1;
 
 	/* Get file from fd, checking fd validity */	
-	if((file = fd_get_file(fd)) == NULL)
+	if(fd_get_data(fd, &file))
 		return -1;	
 	
 	file = file_reopen(file);
@@ -483,3 +514,69 @@ sys_munmap(mapid_t mapping)
 	free(map);
 }
 /* Project3 E */
+/* Project4 S */
+static bool 
+sys_chdir(const char* dir)
+{
+	struct dir* cur_dir = dir_open_cur();
+	char dirname[NAME_MAX + 1];
+	struct inode* inode = NULL;
+	bool success;
+	bool isdir;
+
+	valid_string(dir);
+	
+	success = dir_chdir(&cur_dir, dir, dirname) 
+						&& dir_lookup(cur_dir, dirname, &inode, &isdir)
+						&& isdir;
+
+	dir_close(cur_dir);
+	if(success)
+	{
+		dir_close(thread_current()->dir);
+		thread_current()->dir = dir_open(inode);
+	}
+
+	return success;
+}
+
+static bool 
+sys_mkdir(const char* dir)
+{
+	valid_string(dir);
+	return filesys_create(dir, 256, true);
+}
+
+static bool 
+sys_readdir(int fd, char* name)
+{
+	void* dir = NULL;
+	
+	if(!fd_get_data(fd, &dir))
+		return false;	
+
+	return dir_readdir(dir, name);
+}
+
+static bool 
+sys_isdir(int fd)
+{
+	void* dir = NULL;
+	return fd_get_data(fd, &dir) && dir != NULL;
+}
+
+static int 
+sys_inumber(int fd)
+{
+	void* data = NULL;
+	bool isdir = fd_get_data(fd, &data);
+
+	if(data == NULL)
+		return -1;	
+
+	if(isdir)
+		return inode_get_inumber(dir_get_inode(data));
+	else
+		return inode_get_inumber(file_get_inode(data));
+}
+/* Project4 E */
