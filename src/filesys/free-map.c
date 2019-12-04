@@ -6,6 +6,7 @@
 #include "filesys/inode.h"
 /* Project4 S */
 #include "threads/malloc.h"
+#include <stdio.h>
 /* Project4 E */
 
 static struct file *free_map_file;   /* Free map file. */
@@ -23,14 +24,29 @@ free_map_init (void)
 }
 
 /* Project4 S */
+/* Allocate a single sector from the free map. 
+   Returns SECTOR if successful, -1 otherwise.
+   An allocated sector should not be the same with RESERVED_SECTOR. */
+block_sector_t
+free_map_allocate (block_sector_t reserved_sector)
+{
+  block_sector_t sector = -1;
+  block_sector_t* sectors = free_map_allocate_multiple (1, reserved_sector);
+  if (sectors)
+   sector = sectors[0];
+  free (sectors);
+  return sector;
+}
+
 /* Allocates CNT sectors from the free map and stores
    all indices(all aloocated sector numbers) into SECTORS.
    Returns SECTORS if successful, NULL if not enough
    sectors were available or if the free_map file could not be
    written. 
-   The caller must free SECTORS after using it. */
+   The caller must free SECTORS after using it.
+   Any of an allocated sector should not be the same with RESERVED_SECTOR. */
 block_sector_t*
-free_map_allocate (size_t cnt)
+free_map_allocate_multiple (size_t cnt, block_sector_t reserved_sector)
 {
   size_t i;
   bool success = true;
@@ -39,6 +55,12 @@ free_map_allocate (size_t cnt)
   for (i = 0; i < cnt; i++)
   {
     block_sector_t sector = bitmap_scan_and_flip (free_map, 0, 1, false);
+    /* Allocated sector should not be the same with reserved one. */
+    while (reserved_sector == sector)
+    {
+      bitmap_reset (free_map, sector);
+      sector = bitmap_scan_and_flip (free_map, reserved_sector + 1, 1, false);
+    }
     if (sector != BITMAP_ERROR
       && free_map_file != NULL
       && !bitmap_write (free_map, free_map_file))
@@ -63,6 +85,7 @@ free_map_allocate (size_t cnt)
       bitmap_reset (free_map, sectors[j]);
       free (sectors);
     }
+    printf ("\n[free_map_allocate failed]\n\n");
     return NULL;
   }
 

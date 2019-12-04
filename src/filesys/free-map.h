@@ -12,7 +12,8 @@ void free_map_open (void);
 void free_map_close (void);
 
 /* Project4 S */
-block_sector_t* free_map_allocate (size_t cnt);
+block_sector_t free_map_allocate (block_sector_t reserved_sector);
+block_sector_t* free_map_allocate_multiple (size_t cnt, block_sector_t reserved_sector);
 void free_map_release (block_sector_t);
 /* Project4 E */
 

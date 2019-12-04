@@ -9,6 +9,7 @@
 /* Project4 S */
 #include "filesys/cache.h"
 #include "threads/synch.h"
+#include <stdio.h>
 /* Project4 E */
 
 /* Identifies an inode. */
@@ -17,13 +18,17 @@
 /* Project4 S */
 /* Max size of on-disk inode in sectors. */
 #define INODE_TOTAL_SECTOR_NUM 16524
+const int inode_total_sector_num = 16524;
 
 /* Max number of int-size(4 bytes) elements in a single sector. */
 #define INT_PER_SECTOR 128
+const int int_per_sector = 128;
 
 /* Upper bounds. */
 #define INODE_END_OF_DIRECT 12
-#define INODE_END_OF_SINGLE INODE_END_OF_DIRECT +  INT_PER_SECTOR
+#define INODE_END_OF_SINGLE 140
+const int inode_end_of_direct = 12;
+const int inode_end_of_single = 140;
 
 
 /* On-disk inode (UNIX UFS).
@@ -32,24 +37,14 @@
    (8,460,288 byts = INODE_TOTAL_SECTOR_NUM sectors ~= 8MB = 16,384 sectors = 8,388,608 bytes) */
 struct inode_disk
   {
-<<<<<<< HEAD
-    block_sector_t start;               /* First data sector. */
-    off_t length;                       /* File size in bytes. */
-		/* Project4 S */
-		block_sector_t parent;							/* parent directory sector number */
-    unsigned magic;                     /* Magic number. */
-    uint32_t unused[124];               /* Not used. */
-		/* Project4 E */
-=======
     block_sector_t direct_sectors[12];              /* Direct data. */
     block_sector_t single_indirect;                 /* Sector number of single indirect data. */
     block_sector_t double_indirect;                 /* Sector number of double indirect data. */
-    block_sector_t* allocated_sectors;              /* Array of allocated sectors */
+    block_sector_t parent;							            /* parent directory sector number */
     block_sector_t size;                            /* File size in sectors. */
     off_t length;                                   /* File size in bytes. */
     unsigned magic;                                 /* Magic number. */
     uint32_t unused[110];                           /* Not used. */
->>>>>>> indexed inode setup
   };
 
 /* On-disk single indirect inode.
@@ -57,7 +52,7 @@ struct inode_disk
    The capacity is up to 128 sectors long. */
 struct inode_disk_single
   {
-    block_sector_t direct_sectors[INT_PER_SECTOR];      /* Direct data. */
+    block_sector_t direct_sectors[INT_PER_SECTOR];      /* Sector numbers of direct data. */
   };
 
 /* On-disk doulbe indirect inode.
@@ -65,10 +60,10 @@ struct inode_disk_single
    The capacity is up to 128 * 128 sectors long. */
 struct inode_disk_double
   {
-    block_sector_t single_indirects[INT_PER_SECTOR];     /* Single indirect data. */
+    block_sector_t single_indirects[INT_PER_SECTOR];    /* Sector numbers of single indirect inode. */
   };
 
-static void inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_sector_t* allocated_sectors);
+static void inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_sector_t* allocated_sectors, block_sector_t reserved_sector);
 static block_sector_t index_to_sector (const struct inode_disk* inode_disk, off_t indexed_sector);
 /* Project4 E */
 
@@ -99,7 +94,54 @@ static block_sector_t
 index_to_sector (const struct inode_disk* inode_disk, off_t index)
 {
   ASSERT (inode_disk != NULL);
-  return inode_disk->allocated_sectors[index];
+
+  block_sector_t sector = -1;
+
+  size_t i;
+  int single_indirect_index = 0;
+  for (i = 0; i < inode_disk->size; i++)
+  {
+    if (i < INODE_END_OF_DIRECT)
+    {
+      if ((off_t)i == index)
+      {
+        sector = inode_disk->direct_sectors[i];
+        break;
+      }
+    }
+    else if (i >= INODE_END_OF_DIRECT && i < INODE_END_OF_SINGLE)
+    {
+      if ((off_t)i == index)
+      {
+        struct inode_disk_single* inode_s = malloc (sizeof (struct inode_disk_single));
+        block_read (fs_device, inode_disk->single_indirect, inode_s);
+        sector = inode_s->direct_sectors[i - inode_end_of_direct];
+        free (inode_s);
+        break;
+      }
+    }
+    else
+    {
+      if ((off_t)i == index)
+      {
+        struct inode_disk_single* inode_s = malloc (sizeof (struct inode_disk_single));
+        struct inode_disk_double* inode_d = malloc (sizeof (struct inode_disk_double));
+        block_read (fs_device, inode_disk->double_indirect, inode_d);
+        block_read (fs_device, inode_d->single_indirects[single_indirect_index], inode_s);
+        sector = inode_s->direct_sectors[i - inode_end_of_single + (single_indirect_index * int_per_sector)];
+        free (inode_s);
+        free (inode_d);
+        break;
+      }
+
+      if ((((int)i - inode_end_of_single + 1) / int_per_sector)  == (single_indirect_index + 1))
+      {
+        /* Advacne. */
+        single_indirect_index++;
+      }      
+    }    
+  }
+  return sector;
 }
 
 /* Returns the block device sector that contains byte offset POS
@@ -121,33 +163,28 @@ byte_to_sector (const struct inode *inode, off_t pos)
 static struct list open_inodes;
 /* Project4 S */
 static struct lock inodes_lock;
-<<<<<<< HEAD
-=======
 static struct lock free_map_lock;
->>>>>>> indexed inode setup
 /* Project4 E */
 
 /* Initializes the inode module. */
 void
 inode_init (void) 
 {
+  ASSERT (sizeof(struct inode_disk) == BLOCK_SECTOR_SIZE);
+  ASSERT (sizeof(struct inode_disk_single) == BLOCK_SECTOR_SIZE);
+  ASSERT (sizeof(struct inode_disk_double) == BLOCK_SECTOR_SIZE);
+
   list_init (&open_inodes);
-<<<<<<< HEAD
-	/* Project4 S */
-	lock_init(&inodes_lock);
-	/* Project4 E */
-=======
   /* Project4 S */
 	lock_init(&inodes_lock);
 	lock_init(&free_map_lock);
   /* Project4 E */
->>>>>>> indexed inode setup
 }
 
 /* Project4 S */
 /* Insert data into inode disk */
 static void
-inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_sector_t* allocated_sectors)
+inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_sector_t* allocated_sectors, block_sector_t reserved_sector)
 {
   ASSERT (disk_inode != NULL);
   ASSERT (sectors > 0 && sectors <= INODE_TOTAL_SECTOR_NUM);
@@ -155,12 +192,13 @@ inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_
   
   static char zeros[BLOCK_SECTOR_SIZE];
 
-  /* Allocate memory for single and double indirect of disk_inode. */
+  /* Allocate memory for single and double indirect of DISK_INODE. */
   struct inode_disk_single* single_indirect = malloc (sizeof (struct inode_disk_single));
-  struct inode_disk_double* double_indirect = malloc (sizeof (struct inode_disk_single));
+  struct inode_disk_double* double_indirect = malloc (sizeof (struct inode_disk_double));
 
-  int i;
+  size_t i;
   int single_indirect_index = 0;
+  const size_t END_OF_INODE = sectors - 1;
   for (i = 0; i < sectors; i++)
   {
     if (i < INODE_END_OF_DIRECT)
@@ -172,46 +210,51 @@ inode_disk_create (struct inode_disk* disk_inode, block_sector_t sectors, block_
     else if (i >= INODE_END_OF_DIRECT && i < INODE_END_OF_SINGLE)
     {
       /* Allocate into single indirect data. */
-      single_indirect->direct_sectors[i - INODE_END_OF_DIRECT] = allocated_sectors[i];
+      single_indirect->direct_sectors[i - inode_end_of_direct] = allocated_sectors[i];
       block_write (fs_device, allocated_sectors[i], zeros);
 
       /* Block write single indirect at the end. */
-      if (i == sectors - 1 || i == INODE_END_OF_SINGLE - 1)
+      if (i == END_OF_INODE || (i == inode_end_of_single - 1))
       {
         block_write (fs_device, disk_inode->single_indirect, single_indirect);
+
+        /* Empty single indirect. */
+        memset (&single_indirect->direct_sectors, -1, sizeof(single_indirect->direct_sectors));
       }
     }
     else
     {
       /* Allocate into double indirect data. */
-      single_indirect->direct_sectors[i - INODE_END_OF_SINGLE + (single_indirect_index * INT_PER_SECTOR)] = allocated_sectors[i];
+      int index = i - inode_end_of_single + (single_indirect_index * int_per_sector);
+      single_indirect->direct_sectors[index] = allocated_sectors[i];
       block_write (fs_device, allocated_sectors[i], zeros);
 
-      /* Block write single indirect at the end of each single indirect. */
-      if (i == sectors - 1 || ((i - INODE_END_OF_SINGLE + 1) / INT_PER_SECTOR)  == (single_indirect_index + 1))
+      /* Block write after the current single indirect full. */
+      if ((i == END_OF_INODE) || ((((int)i - inode_end_of_single + 1) / int_per_sector)  == (single_indirect_index + 1)))
       {
-        /* Block write single indirect and attach it to double indirect. */
-        block_sector_t* indirect_sector = free_map_allocate (1);
-        double_indirect->single_indirects[single_indirect_index] = indirect_sector[0];
+        /* Block write and attach to double indirect. */
+        double_indirect->single_indirects[single_indirect_index] = free_map_allocate (reserved_sector);
         block_write (fs_device, double_indirect->single_indirects[single_indirect_index], single_indirect);
-        free (indirect_sector);
         
-        /* Reset single indirect structure. */
-        free (single_indirect);
-        single_indirect = malloc (sizeof (struct inode_disk_single));
+        /* Empty single indirect. */
+        memset (&single_indirect->direct_sectors, -1, sizeof(single_indirect->direct_sectors));
 
         /* Advacne. */
         single_indirect_index++;
+
+        if (i == END_OF_INODE)
+        {
+          /* Block write double indirect at the end. */
+          block_write (fs_device, disk_inode->double_indirect, double_indirect);
+        }
       }      
     }    
   }
 
-  /* Block write double indirect at the end. */
-  block_write (fs_device, disk_inode->double_indirect, double_indirect);
-
   /* Free resources */
   free (single_indirect);
   free (double_indirect);
+
 }
 /* Project4 E */
 
@@ -238,31 +281,24 @@ inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
     {
       size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
-<<<<<<< HEAD
 			/* Project4 S */
-			disk_inode->parent = parent_sector;
-			/* Project4 E */
-=======
       disk_inode->size = sectors;
->>>>>>> indexed inode setup
+			disk_inode->parent = parent_sector;
       disk_inode->magic = INODE_MAGIC;
-      /* Project4 S */
+
       /* Attach each indirect sector to disk inode. */
-      block_sector_t* indirect_sectors = free_map_allocate (2);
-      disk_inode->single_indirect = indirect_sectors[0];
-      disk_inode->double_indirect = indirect_sectors[1];
+      disk_inode->single_indirect = free_map_allocate (sector);
+      disk_inode->double_indirect = free_map_allocate (sector);
 
       block_sector_t* allocated_sectors;
-      if ((allocated_sectors = free_map_allocate (sectors)))
+      if ((allocated_sectors = free_map_allocate_multiple (sectors, sector)))
         {
-          disk_inode->allocated_sectors = allocated_sectors;
           if (sectors > 0) 
-            inode_disk_create (disk_inode, sectors, allocated_sectors);
+            inode_disk_create (disk_inode, sectors, allocated_sectors, sector);
           block_write (fs_device, sector, disk_inode);
           success = true; 
         } 
 
-      free (indirect_sectors);
       free (allocated_sectors);
       /* Project4 E */
       free (disk_inode);
@@ -352,6 +388,7 @@ void
 inode_close (struct inode *inode) 
 {
 	/* Project4 S */
+  size_t i;
 	off_t ofs;
 	/* Project4 E */
 
@@ -375,7 +412,7 @@ inode_close (struct inode *inode)
       if (inode->removed) 
         {
           free_map_release (inode->sector);
-          for (int i; i < bytes_to_sectors (inode->data.length); i++)
+          for (i = 0; i < bytes_to_sectors (inode->data.length); i++)
             free_map_release (index_to_sector (&inode->data, i));
         }
 
