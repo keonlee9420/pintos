@@ -127,7 +127,7 @@ fsutil_extract (char **argv UNUSED)
             PANIC ("%s: create failed", file_name);
           dst = filesys_open (file_name, &isdir);
 					/* Project4 E */
-          if (dst == NULL || isdir)
+          if (dst == NULL)
             PANIC ("%s: open failed", file_name);
 
           /* Do copy. */
@@ -192,7 +192,7 @@ fsutil_append (char **argv)
 	/* Project4 S */
   src = filesys_open (file_name, &isdir);
 	/* Project4 E */
-  if (src == NULL || isdir)
+  if (src == NULL)
     PANIC ("%s: open failed", file_name);
   size = file_length (src);
 

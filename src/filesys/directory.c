@@ -16,6 +16,7 @@ struct dir
   {
     struct inode *inode;                /* Backing store. */
     off_t pos;                          /* Current position. */
+		bool deny_write;										/* Not Used: SYnch with struct file */
   };
 
 /* A single directory entry. */
