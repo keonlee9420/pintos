@@ -50,8 +50,12 @@ free_map_allocate_multiple (size_t cnt, block_sector_t reserved_sector)
 {
   size_t i;
   bool success = true;
-  block_sector_t* sectors = (block_sector_t*)malloc (sizeof (block_sector_t) * cnt);
-  
+  block_sector_t* sectors;
+
+  if (cnt <= 0)
+   return NULL;
+
+  sectors = (block_sector_t*)malloc (sizeof (block_sector_t) * cnt);
   for (i = 0; i < cnt; i++)
   {
     block_sector_t sector = bitmap_scan_and_flip (free_map, 0, 1, false);
