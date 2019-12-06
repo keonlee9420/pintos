@@ -99,6 +99,11 @@ filesys_open (const char *name, bool* isdir)
 		return NULL;
 	/* Project4 E */
 
+	/* IF filename is '.', 
+		 then return iterated directory by chdir */
+	if(!strcmp(filename, "."))
+		return dir;
+
   if (dir != NULL)
     dir_lookup (dir, filename, &inode, isdir);
   dir_close (dir);
