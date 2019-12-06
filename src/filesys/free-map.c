@@ -6,11 +6,15 @@
 #include "filesys/inode.h"
 /* Project4 S */
 #include "threads/malloc.h"
+#include "threads/synch.h"
 #include <stdio.h>
 /* Project4 E */
 
 static struct file *free_map_file;   /* Free map file. */
 static struct bitmap *free_map;      /* Free map, one bit per sector. */
+/* Project4 S */
+static struct lock free_map_lock;
+/* Project4 E */
 
 /* Initializes the free map. */
 void
@@ -21,6 +25,9 @@ free_map_init (void)
     PANIC ("bitmap creation failed--file system device is too large");
   bitmap_mark (free_map, FREE_MAP_SECTOR);
   bitmap_mark (free_map, ROOT_DIR_SECTOR);
+	/* Project4 S */
+	lock_init(&free_map_lock);
+	/* Project4 E */
 }
 
 /* Project4 S */
@@ -54,6 +61,7 @@ free_map_allocate_multiple (size_t cnt)
    return NULL;
 
   sectors = (block_sector_t*)malloc (sizeof (block_sector_t) * cnt);
+	lock_acquire(&free_map_lock);
   for (i = 0; i < cnt; i++)
   {
     block_sector_t sector = bitmap_scan_and_flip (free_map, 0, 1, false);
@@ -71,19 +79,21 @@ free_map_allocate_multiple (size_t cnt)
       break;
     }
   }
+	lock_release(&free_map_lock);
 
   /* If fails, release resources and return NULL. */
   if (!success)
   {
     size_t j;
+		lock_acquire(&free_map_lock);
     for (j = 0; j <= i; j++)
     {
       bitmap_reset (free_map, sectors[j]);
       free (sectors);
     }
+		lock_release(&free_map_lock);
     return NULL;
   }
-
   return sectors;
 }
 
@@ -91,9 +101,11 @@ free_map_allocate_multiple (size_t cnt)
 void
 free_map_release (block_sector_t sector)
 {
+	lock_acquire(&free_map_lock);
   ASSERT (bitmap_all (free_map, sector, 1));
   bitmap_reset (free_map, sector);
   bitmap_write (free_map, free_map_file);
+	lock_release(&free_map_lock);
 }
 /* Project4 E */
 
