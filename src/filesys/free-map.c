@@ -107,6 +107,13 @@ free_map_release (block_sector_t sector)
   bitmap_write (free_map, free_map_file);
 	lock_release(&free_map_lock);
 }
+
+/* Returns true if sector is marked as allocated, false otherwise. */
+bool
+free_map_inuse (block_sector_t sector)
+{
+  return bitmap_all (free_map, sector, 1);
+}
 /* Project4 E */
 
 /* Opens the free map file and reads it from disk. */

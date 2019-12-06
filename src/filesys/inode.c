@@ -53,6 +53,7 @@ struct indirect_disk
   };
 
 static block_sector_t index_to_sector (const struct inode_disk* inode_disk, off_t index);
+static void inode_disk_delete (struct inode_disk* disk_inode);
 static void inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, block_sector_t* allocated_sectors);
 static int check_extensible (off_t offset, off_t size);
 /* Project4 E */
@@ -293,6 +294,37 @@ inode_get_inumber (const struct inode *inode)
   return inode->sector;
 }
 
+/* Project4 S */
+/* Delete inode disk block. */
+static void
+inode_disk_delete (struct inode_disk* disk_inode)
+{
+  size_t i;
+
+  /* Free every sector. */
+  for (i = 0; i < disk_inode->size; i++)
+    free_map_release (index_to_sector (disk_inode, i));
+  
+  /* Free every single indirect inode. */ 
+  if (free_map_inuse (disk_inode->single_indirect))
+    free_map_release (disk_inode->single_indirect);
+
+  /* Free every single indirect inode. */ 
+  if (free_map_inuse (disk_inode->double_indirect))
+  {
+    struct indirect_disk* inode_d = malloc (BLOCK_SECTOR_SIZE);
+    block_read (fs_device, disk_inode->double_indirect, inode_d);
+    for (i = 0; i < INT_PER_SECTOR; i++)
+    {
+      if (free_map_inuse (inode_d->sector[i]))
+        free_map_release (inode_d->sector[i]);
+    }
+    free_map_release (disk_inode->double_indirect);
+    free (inode_d);
+  }
+}
+/* Project4 E */
+
 /* Closes INODE and writes it to disk.
    If this was the last reference to INODE, frees its memory.
    If INODE was also a removed inode, frees its blocks. */
@@ -300,7 +332,6 @@ void
 inode_close (struct inode *inode) 
 {
 	/* Project4 S */
-  size_t i;
 	off_t ofs;
 	/* Project4 E */
 
@@ -315,7 +346,6 @@ inode_close (struct inode *inode)
   if (--inode->open_cnt == 0)
     {
 			lock_release(&inode->lock);
-			/* Project4 S */
       
 			/* Remove from inode list and release lock. */
       list_remove (&inode->elem);
@@ -329,23 +359,10 @@ inode_close (struct inode *inode)
 
       /* Deallocate blocks if removed. */
       if (inode->removed) 
-        {
-          for (i = 0; i < bytes_to_sectors (inode->data.length); i++)
-            free_map_release (index_to_sector (&inode->data, i));
-					/*if(inode->data.double_indirect != UINT_MAX)
-					{
-						struct indirect_disk* inode_d = malloc(BLOCK_SECTOR_SIZE);
-						block_read(fs_device, inode->data.double_indirect, inode_d);
-						for(i = 0; i < INT_PER_SECTOR; i++)
-							if(inode_d->sector[i] != UINT_MAX)
-								free_map_release(inode_d->sector[i]);
-						free_map_release(inode->data.double_indirect);
-						free(inode_d);
-					}
-					if(inode->data.single_indirect != UINT_MAX)
-						free_map_release(inode->data.single_indirect);*/
-          free_map_release (inode->sector);
-        }
+      {
+        inode_disk_delete (&inode->data);
+        free_map_release (inode->sector);
+      }
 			/* Project4 E */
 
       free (inode); 
