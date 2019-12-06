@@ -659,4 +659,68 @@ inode_get_parent(const struct inode* inode)
 	return inode->data.parent;
 }
 
+/* Get sector from index
+	 extend: true: extend sector, false: not */
+static block_sector_t 
+get_sector(struct inode_disk* idisk, off_t index, bool extend)
+{
+	block_sector_t sector;
+	if(index < DIRECT_LIMIT)
+	{
+		sector = idisk->direct_sectors[index];
+		if(extend && sector == UINT_MAX)
+			idisk->direct_sectore[index] = sector = free_map_allocate();
+	}
+	else if(index < SINGLE_INDIRECT_LIMIT)
+	{
+		size_t idx_single = index - DIRECT_LIMIT;
+		/* Set single indirect inode */
+		struct indirect_disk* single = malloc(BLOCK_SECTOR_SIZE);
+		if(idisk->single_indirect == UINT_MAX)
+		{
+			if(extend)
+			{
+				idisk->single_indirect = free_map_allocate();
+				memset(single, 0xff, BLOCK_SECTOR_SIZE);
+			}
+			else
+			{
+				free(single);
+				return UINT_MAX;
+			}
+		}
+		else
+			block_read(fs_device, idisk->single_indirect, single);
+		/* Extend index */
+		single->sector[idx_single] = free_map_allocate();
+		block_write(fs_device, idisk->single_indirect, single);
+		free(single);
+	}
+	else
+	{
+		size_t idx_double = (index - SINGLE_INDIRECT_LIMIT) / INT_PER_SECTOR;
+		size_t idx_single = (index - SINGLE_INDIRECT_LIMIT) % INT_PER_SECTOR;
+		struct indirect_disk* indir_d = malloc(BLOCK_SECTOR_SIZE);
+		struct indirect_disk* indir_s = malloc(BLOCK_SECTOR_SIZE);
+		if(idisk->double_indirect == UINT_MAX)
+		{
+			idisk->double_indirect = free_map_allocate();
+			memset(indir_d, 0xff, BLOCK_SECTOR_SIZE);
+		}
+		else
+			block_read(fs_device, idisk->double_indirect, indir_d);
+		if(indir_d->sector[idx_double] == UINT_MAX)
+		{
+			indir_d->sector[idx_double] = free_map_allocate();
+			memset(indir_s, 0xff, BLOCK_SECTOR_SIZE);
+		}
+		else
+			block_read(fs_device, indir_d->sector[idx_double], indir_s);
+		indir_s->sector[idx_single] = free_map_allocate();
+		block_write(fs_device, indir_d->sector[idx_double], indir_s);
+		block_write(fs_device, idisk->double_indirect, indir_d);
+		free(indir_s);
+		free(indir_d);
+	}
+}
 /* Project4 E */
