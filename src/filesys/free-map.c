@@ -25,13 +25,12 @@ free_map_init (void)
 
 /* Project4 S */
 /* Allocate a single sector from the free map. 
-   Returns SECTOR if successful, -1 otherwise.
-   An allocated sector should not be the same with RESERVED_SECTOR. */
+   Returns SECTOR if successful, -1 otherwise. */
 block_sector_t
-free_map_allocate (block_sector_t reserved_sector)
+free_map_allocate (void)
 {
   block_sector_t sector = -1;
-  block_sector_t* sectors = free_map_allocate_multiple (1, reserved_sector);
+  block_sector_t* sectors = free_map_allocate_multiple (1);
   if (sectors)
    sector = sectors[0];
   free (sectors);
@@ -43,10 +42,9 @@ free_map_allocate (block_sector_t reserved_sector)
    Returns SECTORS if successful, NULL if not enough
    sectors were available or if the free_map file could not be
    written. 
-   The caller must free SECTORS after using it.
-   Any of an allocated sector should not be the same with RESERVED_SECTOR. */
+   The caller must free SECTORS after using it. */
 block_sector_t*
-free_map_allocate_multiple (size_t cnt, block_sector_t reserved_sector)
+free_map_allocate_multiple (size_t cnt)
 {
   size_t i;
   bool success = true;
@@ -59,12 +57,6 @@ free_map_allocate_multiple (size_t cnt, block_sector_t reserved_sector)
   for (i = 0; i < cnt; i++)
   {
     block_sector_t sector = bitmap_scan_and_flip (free_map, 0, 1, false);
-    /* Allocated sector should not be the same with reserved one. */
-    while (reserved_sector == sector)
-    {
-      bitmap_reset (free_map, sector);
-      sector = bitmap_scan_and_flip (free_map, reserved_sector + 1, 1, false);
-    }
     if (sector != BITMAP_ERROR
       && free_map_file != NULL
       && !bitmap_write (free_map, free_map_file))
@@ -89,7 +81,6 @@ free_map_allocate_multiple (size_t cnt, block_sector_t reserved_sector)
       bitmap_reset (free_map, sectors[j]);
       free (sectors);
     }
-    printf ("\n[free_map_allocate failed]\n\n");
     return NULL;
   }
 
@@ -101,7 +92,7 @@ void
 free_map_release (block_sector_t sector)
 {
   ASSERT (bitmap_all (free_map, sector, 1));
-  bitmap_set_multiple (free_map, sector, 1, false);
+  bitmap_reset (free_map, sector);
   bitmap_write (free_map, free_map_file);
 }
 /* Project4 E */

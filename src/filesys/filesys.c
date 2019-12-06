@@ -60,7 +60,7 @@ filesys_create (const char *name, off_t initial_size, bool isdir)
 	char filename[NAME_MAX + 1];
   struct dir *dir = dir_open_cur ();
 	block_sector_t parent_sector = inode_get_inumber(dir_get_inode(dir));
-  block_sector_t inode_sector = free_map_allocate(-1);
+  block_sector_t inode_sector = free_map_allocate ();
   bool success = (dir != NULL
 									&& dir_chdir(&dir, name, filename)
                   && inode_sector

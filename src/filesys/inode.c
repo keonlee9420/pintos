@@ -65,7 +65,7 @@ struct inode_disk_double
   };
 
 static block_sector_t index_to_sector (const struct inode_disk* inode_disk, off_t index);
-static void inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, block_sector_t* allocated_sectors, block_sector_t reserved_sector);
+static void inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, block_sector_t* allocated_sectors);
 static int check_extensible (off_t offset, off_t size);
 /* Project4 E */
 
@@ -210,14 +210,14 @@ inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
       disk_inode->magic = INODE_MAGIC;
 
       /* Attach each indirect sector to disk inode. */
-      disk_inode->single_indirect = free_map_allocate (sector);
-      disk_inode->double_indirect = free_map_allocate (sector);
+      disk_inode->single_indirect = free_map_allocate ();
+      disk_inode->double_indirect = free_map_allocate ();
 
       block_sector_t* allocated_sectors;
-      if ((allocated_sectors = free_map_allocate_multiple (sectors, sector)))
+      if ((allocated_sectors = free_map_allocate_multiple (sectors)))
         {
           if (sectors > 0) 
-            inode_disk_extend (disk_inode, sectors, allocated_sectors, sector);
+            inode_disk_extend (disk_inode, sectors, allocated_sectors);
           disk_inode->size = sectors;
           disk_inode->length = length;
           block_write (fs_device, sector, disk_inode);
@@ -346,7 +346,6 @@ inode_close (struct inode *inode)
             free_map_release (index_to_sector (&inode->data, i));
         }
 
-			/* Project4 S */
 			/* Writeback and delete buffer cache */
 			for(ofs = 0; ofs < inode->data.length; ofs += BLOCK_SECTOR_SIZE)
 			{
@@ -429,7 +428,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 /* Project4 S */
 /* Extend inode to MAX_CAPACITY. */
 static void
-inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, block_sector_t* allocated_sectors, block_sector_t reserved_sector)
+inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, block_sector_t* allocated_sectors)
 {
   ASSERT (disk_inode != NULL);
   ASSERT (max_capacity > 0 && max_capacity <= INODE_TOTAL_SECTOR_NUM);
@@ -455,7 +454,7 @@ inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, b
       if (disk_inode->direct_sectors[i] == -1)
       {
         /* Allocate if empty. */
-        sector = (i_ofs) >= 0 ? allocated_sectors[i_ofs] : free_map_allocate (reserved_sector);
+        sector = (i_ofs) >= 0 ? allocated_sectors[i_ofs] : free_map_allocate ();
         disk_inode->direct_sectors[i] = sector;
         block_write (fs_device, sector, zeros);
       }
@@ -467,7 +466,7 @@ inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, b
       if (single_indirect->direct_sectors[i - inode_end_of_direct] == -1)
       {
         /* Allocate if empty. */
-        sector = (i_ofs) >= 0 ? allocated_sectors[i_ofs] : free_map_allocate (reserved_sector);
+        sector = (i_ofs) >= 0 ? allocated_sectors[i_ofs] : free_map_allocate ();
         single_indirect->direct_sectors[i - inode_end_of_direct] = sector;
         block_write (fs_device, sector, zeros);
       }
@@ -489,7 +488,7 @@ inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, b
       if (single_indirect->direct_sectors[index] == -1)
       {
         /* Allocate if empty. */
-        sector = (i_ofs) >= 0 ? allocated_sectors[i_ofs] : free_map_allocate (reserved_sector);;
+        sector = (i_ofs) >= 0 ? allocated_sectors[i_ofs] : free_map_allocate ();
         single_indirect->direct_sectors[index] = sector;
         block_write (fs_device, sector, zeros);
       }
@@ -498,7 +497,7 @@ inode_disk_extend (struct inode_disk* disk_inode, block_sector_t max_capacity, b
       if ((i == END_OF_INODE) || ((((int)i - inode_end_of_single + 1) / int_per_sector)  == (single_indirect_index + 1)))
       {
         /* Block write and attach to double indirect. */
-        double_indirect->single_indirects[single_indirect_index] = free_map_allocate (reserved_sector);
+        double_indirect->single_indirects[single_indirect_index] = free_map_allocate ();
         block_write (fs_device, double_indirect->single_indirects[single_indirect_index], single_indirect);
         
         /* Empty single indirect. */
@@ -589,9 +588,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
           /* Extend the inode to MAX_CAPACITY. */
           block_sector_t* allocated_sectors;
-          if ((allocated_sectors = free_map_allocate_multiple (max_capacity - inode->data.size, inode->sector)))
+          if ((allocated_sectors = free_map_allocate_multiple (max_capacity - inode->data.size)))
             {
-              inode_disk_extend (&inode->data, max_capacity, allocated_sectors, -1);
+              inode_disk_extend (&inode->data, max_capacity, allocated_sectors);
             } 
           else
             {
