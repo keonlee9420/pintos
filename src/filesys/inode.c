@@ -51,7 +51,8 @@ struct indirect_disk
     block_sector_t sector[INT_PER_SECTOR]; 		     /* Sector numbers of direct data. */
   };
 
-static block_sector_t extend_inode(struct inode_disk* idisk, off_t pos);
+static block_sector_t extend_inode(struct inode_disk* idisk, 
+																	 block_sector_t isector, off_t pos);
 static block_sector_t get_sector(const struct inode_disk* idisk, off_t pos);
 /* Project4 E */
 
@@ -144,10 +145,12 @@ inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
       disk_inode->single_indirect = UINT_MAX;
       disk_inode->double_indirect = UINT_MAX;
 
+			lock_acquire(&inodes_lock);
 			for(i = 0; i < length; i += BLOCK_SECTOR_SIZE)
-				extend_inode(disk_inode, i);
+				extend_inode(disk_inode, sector, i);
 
 			block_write(fs_device, sector, disk_inode);
+			lock_release(&inodes_lock);
 			success = true;
 
 			/* Project4 E */
@@ -391,19 +394,17 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 			block_sector_t next_sector = byte_to_sector(inode, offset + BLOCK_SECTOR_SIZE);
 			/* Project4 E */
 
-      /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      off_t inode_left = inode_length (inode) - offset;
+      /* Bytes left in sector. */
       int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
-      int min_left = inode_left < sector_left ? inode_left : sector_left;
 
       /* Project4 S */
       /* Number of bytes to actually write into this sector. */
-      int chunk_size = size < min_left ? size : min_left;
+      int chunk_size = size < sector_left ? size : sector_left;
       if (chunk_size <= 0)
       	break;
 
 			if(sector_idx == UINT_MAX)
-				sector_idx = extend_inode(&inode->data, offset);
+				sector_idx = extend_inode(&inode->data, inode->sector, offset);
 
 			/* Write into buffer cache */
 			cache_write(sector_idx, buffer + bytes_written, chunk_size, sector_ofs, next_sector);
@@ -466,7 +467,7 @@ inode_get_parent(const struct inode* inode)
 /* Add index into inode as active section
 	 Return allocated sector */
 static block_sector_t 
-extend_inode(struct inode_disk* idisk, off_t pos)
+extend_inode(struct inode_disk* idisk, block_sector_t isector, off_t pos)
 {
 	off_t index = pos / BLOCK_SECTOR_SIZE;
 	block_sector_t sector = UINT_MAX;
@@ -535,8 +536,8 @@ extend_inode(struct inode_disk* idisk, off_t pos)
 		free(indir_d);
 	}
 	/* Free resource then return sector */
+	block_write(fs_device, isector, idisk);
 	free(zeros);
-	printf("extended index %d with %d\n", index, sector);
 	return sector;
 }
 

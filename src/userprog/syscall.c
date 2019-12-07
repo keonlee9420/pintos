@@ -555,7 +555,7 @@ static bool
 sys_mkdir(const char* dir)
 {
 	valid_string(dir);
-	return filesys_create(dir, 1024, true);
+	return filesys_create(dir, 512, true);
 }
 
 static bool 
