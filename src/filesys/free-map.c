@@ -33,76 +33,28 @@ free_map_init (void)
 /* Project4 S */
 /* Allocate a single sector from the free map. 
    Returns SECTOR if successful, -1 otherwise. */
-block_sector_t
+block_sector_t 
 free_map_allocate (void)
 {
-  block_sector_t sector = -1;
-  block_sector_t* sectors = free_map_allocate_multiple (1);
-  if (sectors)
-   sector = sectors[0];
-  free (sectors);
-  return sector;
-}
-
-/* Allocates CNT sectors from the free map and stores
-   all indices(all aloocated sector numbers) into SECTORS.
-   Returns SECTORS if successful, NULL if not enough
-   sectors were available or if the free_map file could not be
-   written. 
-   The caller must free SECTORS after using it. */
-block_sector_t*
-free_map_allocate_multiple (size_t cnt)
-{
-  size_t i;
-  bool success = true;
-  block_sector_t* sectors;
-
-  if (cnt <= 0)
-   return NULL;
-
-  sectors = (block_sector_t*)malloc (sizeof (block_sector_t) * cnt);
 	lock_acquire(&free_map_lock);
-  for (i = 0; i < cnt; i++)
-  {
-    block_sector_t sector = bitmap_scan_and_flip (free_map, 0, 1, false);
-    if (sector != BITMAP_ERROR
-      && free_map_file != NULL
-      && !bitmap_write (free_map, free_map_file))
-    {
-      sector = BITMAP_ERROR;
-    }
-    if (sector != BITMAP_ERROR)
-      sectors[i] = sector;
-    else
-    {
-      success = false;
-      break;
-    }
-  }
+	block_sector_t sector = bitmap_scan_and_flip(free_map, 0, 1, false);
+	if (sector != BITMAP_ERROR
+			&& free_map_file != NULL
+			&& !bitmap_write(free_map, free_map_file))
+	{
+		bitmap_reset(free_map, sector);
+		sector = BITMAP_ERROR;
+	}
 	lock_release(&free_map_lock);
-
-  /* If fails, release resources and return NULL. */
-  if (!success)
-  {
-    size_t j;
-		lock_acquire(&free_map_lock);
-    for (j = 0; j <= i; j++)
-    {
-      bitmap_reset (free_map, sectors[j]);
-      free (sectors);
-    }
-		lock_release(&free_map_lock);
-    return NULL;
-  }
-  return sectors;
+	return sector;
 }
 
-/* Makes a SECTOR available for use. */
+/* Mark SECTOR available for use. */
 void
 free_map_release (block_sector_t sector)
 {
 	lock_acquire(&free_map_lock);
-  ASSERT (bitmap_all (free_map, sector, 1));
+  ASSERT (bitmap_test (free_map, sector));
   bitmap_reset (free_map, sector);
   bitmap_write (free_map, free_map_file);
 	lock_release(&free_map_lock);

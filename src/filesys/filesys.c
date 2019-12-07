@@ -7,6 +7,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 /* Project4 S */
+#include <limits.h>
 #include "threads/malloc.h"
 #include "filesys/cache.h"
 /* Project4 E */
@@ -63,13 +64,11 @@ filesys_create (const char *name, off_t initial_size, bool isdir)
   block_sector_t inode_sector = free_map_allocate ();
   bool success = (dir != NULL
 									&& dir_chdir(&dir, name, filename)
-                  && inode_sector
+                  && inode_sector != UINT_MAX
                   && inode_create (inode_sector, initial_size, parent_sector)
                   && dir_add (dir, filename, inode_sector, isdir));
-  if (!success) 
-  {
+  if (!success && inode_sector != UINT_MAX) 
     free_map_release (inode_sector);
-  }
   /* Project4 E */
   dir_close (dir);
 
@@ -97,12 +96,12 @@ filesys_open (const char *name, bool* isdir)
 	/* Travel file path */
 	if(!dir_chdir(&dir, name, filename))
 		return NULL;
-	/* Project4 E */
 
 	/* IF filename is '.', 
 		 then return iterated directory by chdir */
 	if(!strcmp(filename, "."))
 		return dir;
+	/* Project4 E */
 
   if (dir != NULL)
     dir_lookup (dir, filename, &inode, isdir);
