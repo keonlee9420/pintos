@@ -19,7 +19,7 @@ struct dir *dir_open (struct inode *);
 struct dir *dir_open_root (void);
 struct dir *dir_reopen (struct dir *);
 void dir_close (struct dir *);
-struct inode *dir_get_inode (struct dir *);
+struct inode *dir_get_inode (const struct dir *);
 
 /* Reading and writing. */
 bool dir_lookup (const struct dir *, const char *name, struct inode **, bool* isdir);
@@ -32,8 +32,6 @@ bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 /* Per-process directory management */
 bool dir_chdir(struct dir** dir, const char* name, char* filename);
 struct dir* dir_open_cur(void);
-
-void dir_check(struct dir* dir, int rank);
 /* Project4 E */
 
 #endif /* filesys/directory.h */

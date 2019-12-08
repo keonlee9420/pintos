@@ -88,7 +88,7 @@ dir_close (struct dir *dir)
 
 /* Returns the inode encapsulated by DIR. */
 struct inode *
-dir_get_inode (struct dir *dir) 
+dir_get_inode (const struct dir *dir) 
 {
 	if(dir == NULL)
 		return NULL;
@@ -135,14 +135,24 @@ dir_lookup (const struct dir *dir, const char *name,
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
-  if (lookup (dir, name, &e, NULL))
+	
+	/* Project4 S */
+	if(!strcmp(name, ".."))
+	{
+		*inode = inode_open(inode_get_parent(dir_get_inode(dir)));
+		*isdir = true;
+	}
+	else if(!strcmp(name, "."))
+	{
+		*inode = inode_reopen(dir_get_inode(dir));
+		*isdir = true;
+	}
+  else if (lookup (dir, name, &e, NULL))
 	{
     *inode = inode_open (e.inode_sector);
-		/* Project4 S */
 		*isdir = e.isdir;
-		/* Project4 E */
 	}
+	/* Project4 E */
   else
     *inode = NULL;
 
@@ -368,27 +378,5 @@ dir_open_cur(void)
 		return dir_open_root();
 	else
 		return dir_reopen(cur->dir);
-}
-
-void 
-dir_check(struct dir* dir, int rank)
-{
-	char name[NAME_MAX + 1];
-	static bool root = true;
-	if(root)
-	{
-		printf("check: / at %d\n", inode_get_inumber(dir->inode));
-		root = false;
-	}
-	while(dir_readdir(dir, name))
-	{
-		struct inode* inode;
-		bool isdir;
-		ASSERT(dir_lookup(dir, name, &inode, &isdir));
-		printf("check: %s at %d, rank: %d\n", name, inode_get_inumber(inode), rank);
-		if(isdir)
-			dir_check(dir_open(inode), rank + 1);
-	}
-	dir_close(dir);
 }
 /* Project4 E */

@@ -44,7 +44,6 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
-	//dir_check(dir_open_root(), 0);
 	/* Project4 S */
 	cache_writeback();
 	/* Project4 E */
@@ -100,15 +99,6 @@ filesys_open (const char *name, bool* isdir)
 	/* Travel file path */
 	if(!dir_chdir(&dir, name, filename))
 		return NULL;
-
-	/* IF filename is '.', 
-		 then return iterated directory by chdir */
-	if(!strcmp(filename, "."))
-	{
-		*isdir = true;
-		return dir;
-	}
-	/* Project4 E */
 
   if (dir != NULL)
     dir_lookup (dir, filename, &inode, isdir);
