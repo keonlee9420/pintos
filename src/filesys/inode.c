@@ -15,7 +15,6 @@
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
-#define INDIRECT_MAGIC 0x4d2265d6
 
 /* Project4 S */
 /* Max size of on-disk inode in sectors. */
@@ -145,12 +144,10 @@ inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
       disk_inode->single_indirect = UINT_MAX;
       disk_inode->double_indirect = UINT_MAX;
 
-			lock_acquire(&inodes_lock);
 			for(i = 0; i < length; i += BLOCK_SECTOR_SIZE)
 				extend_inode(disk_inode, sector, i);
 
 			block_write(fs_device, sector, disk_inode);
-			lock_release(&inodes_lock);
 			success = true;
 
 			/* Project4 E */
@@ -240,7 +237,6 @@ inode_close (struct inode *inode)
 {
 	/* Project4 S */
   off_t i;
-	off_t ofs;
 	/* Project4 E */
 
   /* Ignore null pointer. */
@@ -255,14 +251,13 @@ inode_close (struct inode *inode)
     {
 			lock_release(&inode->lock);
 			/* Project4 S */
-      
 			/* Remove from inode list and release lock. */
       list_remove (&inode->elem);
 
 			/* Writeback and delete buffer cache */
-			for(ofs = 0; ofs < inode->data.length; ofs += BLOCK_SECTOR_SIZE)
+			for(i = 0; i < inode->data.length; i += BLOCK_SECTOR_SIZE)
 			{
-				block_sector_t sector = byte_to_sector(inode, ofs);
+				block_sector_t sector = byte_to_sector(inode, i);
 				cache_delete(sector);
 			}
 
@@ -271,7 +266,7 @@ inode_close (struct inode *inode)
         {
 					/* Deallocate file blocks */
           for (i = 0; i < inode->data.length; i += BLOCK_SECTOR_SIZE)
-            free_map_release (get_sector(&inode->data, i));
+            free_map_release (byte_to_sector(inode, i));
 					/* Deallocate indirect inodes */
 					if(inode->data.double_indirect != UINT_MAX)
 					{
@@ -288,11 +283,8 @@ inode_close (struct inode *inode)
 					/* Deallocate inode */
           free_map_release (inode->sector);
         }
-			/* Project4 E */
-
       free (inode); 
     }
-	/* Project4 S */
 	else
 		lock_release(&inode->lock);
 	lock_release(&inodes_lock);
@@ -475,11 +467,9 @@ extend_inode(struct inode_disk* idisk, block_sector_t isector, off_t pos)
 
 	if(index < DIRECT_LIMIT)
 	{
-		if(idisk->direct_sectors[index] == UINT_MAX)
-		{
-			sector = idisk->direct_sectors[index] = free_map_allocate();
-			block_write(fs_device, sector, zeros);
-		}
+		ASSERT(idisk->direct_sectors[index] == UINT_MAX);
+		sector = idisk->direct_sectors[index] = free_map_allocate();
+		block_write(fs_device, sector, zeros);
 	}
 	else if(index < SINGLE_INDIRECT_LIMIT)
 	{
@@ -493,13 +483,12 @@ extend_inode(struct inode_disk* idisk, block_sector_t isector, off_t pos)
 		}
 		else
 			block_read(fs_device, idisk->single_indirect, single);
+
 		/* Extend index */
-		if(single->sector[idx_single] == UINT_MAX)
-		{
-			sector = single->sector[idx_single] = free_map_allocate();
-			block_write(fs_device, sector, zeros);
-			block_write(fs_device, idisk->single_indirect, single);
-		}
+		ASSERT(single->sector[idx_single] == UINT_MAX);
+		sector = single->sector[idx_single] = free_map_allocate();
+		block_write(fs_device, sector, zeros);
+		block_write(fs_device, idisk->single_indirect, single);
 		free(single);
 	}
 	else
@@ -516,6 +505,7 @@ extend_inode(struct inode_disk* idisk, block_sector_t isector, off_t pos)
 		}
 		else
 			block_read(fs_device, idisk->double_indirect, indir_d);
+
 		/* Access second-rank inode */
 		if(indir_d->sector[idx_double] == UINT_MAX)
 		{
@@ -524,14 +514,13 @@ extend_inode(struct inode_disk* idisk, block_sector_t isector, off_t pos)
 		}
 		else
 			block_read(fs_device, indir_d->sector[idx_double], indir_s);
+
 		/* Extend index */
-		if(indir_s->sector[idx_single] == UINT_MAX)
-		{
-			sector = indir_s->sector[idx_single] = free_map_allocate();
-			block_write(fs_device, indir_d->sector[idx_double], indir_s);
-			block_write(fs_device, idisk->double_indirect, indir_d);
-			block_write(fs_device, sector, zeros);
-		}
+		ASSERT(indir_s->sector[idx_single] == UINT_MAX);
+		sector = indir_s->sector[idx_single] = free_map_allocate();
+		block_write(fs_device, sector, zeros);
+		block_write(fs_device, indir_d->sector[idx_double], indir_s);
+		block_write(fs_device, idisk->double_indirect, indir_d);
 		free(indir_s);
 		free(indir_d);
 	}
