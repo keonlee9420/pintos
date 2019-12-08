@@ -32,6 +32,8 @@ bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 /* Per-process directory management */
 bool dir_chdir(struct dir** dir, const char* name, char* filename);
 struct dir* dir_open_cur(void);
+
+void dir_check(struct dir* dir, int rank);
 /* Project4 E */
 
 #endif /* filesys/directory.h */

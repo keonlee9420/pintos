@@ -27,17 +27,20 @@
 #define DIRECT_LIMIT 12
 #define SINGLE_INDIRECT_LIMIT 140
 
+/* Error Identifier */
+#define EXTEND_ERROR UINT32_MAX
+
 /* On-disk inode (UNIX UFS).
    Must be exactly BLOCK_SECTOR_SIZE bytes long. 
    The capacity of an single inode could be up to 8,460,288 byts long. 
    (8,460,288 byts = INODE_MAX_SECTOR sectors ~= 8MB = 16,384 sectors = 8,388,608 bytes) */
 struct inode_disk
   {
+    off_t length;                                   /* File size in bytes. */
+    block_sector_t parent;							            /* parent directory sector number */
     block_sector_t direct_sectors[12];              /* Direct data. */
     block_sector_t single_indirect;                 /* Sector number of single indirect data. */
     block_sector_t double_indirect;                 /* Sector number of double indirect data. */
-    block_sector_t parent;							            /* parent directory sector number */
-    off_t length;                                   /* File size in bytes. */
     unsigned magic;                                 /* Magic number. */
     uint32_t unused[111];                           /* Not used. */
   };
@@ -123,6 +126,7 @@ inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
   bool success = false;
 
   ASSERT (length >= 0);
+	ASSERT (sector != UINT32_MAX);
 
   /* If this assertion fails, the inode structure is not exactly
      one sector in size, and you should fix that. */
@@ -140,9 +144,9 @@ inode_create (block_sector_t sector, off_t length, block_sector_t parent_sector)
 
       /* Attach each indirect sector to disk inode. */
 			for(i = 0; i < DIRECT_LIMIT; i++)
-				disk_inode->direct_sectors[i] = UINT_MAX;
-      disk_inode->single_indirect = UINT_MAX;
-      disk_inode->double_indirect = UINT_MAX;
+				disk_inode->direct_sectors[i] = UINT32_MAX;
+      disk_inode->single_indirect = UINT32_MAX;
+      disk_inode->double_indirect = UINT32_MAX;
 
 			for(i = 0; i < length; i += BLOCK_SECTOR_SIZE)
 				extend_inode(disk_inode, sector, i);
@@ -266,22 +270,22 @@ inode_close (struct inode *inode)
         {
 					/* Deallocate file blocks */
           for (i = 0; i < inode->data.length; i += BLOCK_SECTOR_SIZE)
-            free_map_release (byte_to_sector(inode, i));
+            free_map_release (byte_to_sector(inode, i), 1);
 					/* Deallocate indirect inodes */
-					if(inode->data.double_indirect != UINT_MAX)
+					if(inode->data.double_indirect != UINT32_MAX)
 					{
 						struct indirect_disk* inode_d = malloc(BLOCK_SECTOR_SIZE);
 						block_read(fs_device, inode->data.double_indirect, inode_d);
 						for(i = 0; i < INT_PER_SECTOR; i++)
-							if(inode_d->sector[i] != UINT_MAX)
-								free_map_release(inode_d->sector[i]);
-						free_map_release(inode->data.double_indirect);
+							if(inode_d->sector[i] != UINT32_MAX)
+								free_map_release(inode_d->sector[i], 1);
+						free_map_release(inode->data.double_indirect, 1);
 						free(inode_d);
 					}
-					if(inode->data.single_indirect != UINT_MAX)
-						free_map_release(inode->data.single_indirect);
+					if(inode->data.single_indirect != UINT32_MAX)
+						free_map_release(inode->data.single_indirect, 1);
 					/* Deallocate inode */
-          free_map_release (inode->sector);
+          free_map_release (inode->sector, 1);
         }
       free (inode); 
     }
@@ -336,7 +340,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
         break;
 
 			/* Project4 S */
-			if(sector_idx == UINT_MAX)
+			if(sector_idx == UINT32_MAX)
 				memset(buffer + bytes_read, 0, chunk_size);
 			/* Read sector with buffer cache */
 			else
@@ -373,7 +377,10 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	/* Project4 S */
 	lock_acquire(&inode->lock);
 	if(offset + size > inode->data.length)
+	{
 		inode->data.length = offset + size;
+		block_write(fs_device, inode->sector, &inode->data);
+	}
 	/* Project4 E */
   while (size > 0)
     {
@@ -395,7 +402,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       if (chunk_size <= 0)
       	break;
 
-			if(sector_idx == UINT_MAX)
+			if(sector_idx == UINT32_MAX)
 				sector_idx = extend_inode(&inode->data, inode->sector, offset);
 
 			/* Write into buffer cache */
@@ -462,34 +469,45 @@ static block_sector_t
 extend_inode(struct inode_disk* idisk, block_sector_t isector, off_t pos)
 {
 	off_t index = pos / BLOCK_SECTOR_SIZE;
-	block_sector_t sector = UINT_MAX;
-	char* zeros = calloc(BLOCK_SECTOR_SIZE, 1);
+	block_sector_t sector = UINT32_MAX;
+	bool success = false;
+	static char zeros[BLOCK_SECTOR_SIZE];
+
+	ASSERT(isector != UINT32_MAX);
 
 	if(index < DIRECT_LIMIT)
 	{
-		ASSERT(idisk->direct_sectors[index] == UINT_MAX);
-		sector = idisk->direct_sectors[index] = free_map_allocate();
-		block_write(fs_device, sector, zeros);
+		ASSERT(idisk->direct_sectors[index] == UINT32_MAX);
+		if(free_map_allocate(1, &sector))
+		{
+			idisk->direct_sectors[index] = sector;
+			success = true;
+		}
 	}
 	else if(index < SINGLE_INDIRECT_LIMIT)
 	{
 		size_t idx_single = index - DIRECT_LIMIT;
 		/* Set single indirect inode */
 		struct indirect_disk* single = malloc(BLOCK_SECTOR_SIZE);
-		if(idisk->single_indirect == UINT_MAX)
+		if(idisk->single_indirect == UINT32_MAX)
 		{
-			idisk->single_indirect = free_map_allocate();
+			if(!free_map_allocate(1, &idisk->single_indirect))
+				goto single_end;
 			memset(single, 0xff, BLOCK_SECTOR_SIZE);
 		}
 		else
 			block_read(fs_device, idisk->single_indirect, single);
 
 		/* Extend index */
-		ASSERT(single->sector[idx_single] == UINT_MAX);
-		sector = single->sector[idx_single] = free_map_allocate();
-		block_write(fs_device, sector, zeros);
-		block_write(fs_device, idisk->single_indirect, single);
-		free(single);
+		ASSERT(single->sector[idx_single] == UINT32_MAX);
+		if(free_map_allocate(1, &sector))
+		{
+			single->sector[idx_single] = sector;
+			block_write(fs_device, idisk->single_indirect, single);
+			success = true;
+		}
+		single_end:
+			free(single);
 	}
 	else
 	{
@@ -498,35 +516,44 @@ extend_inode(struct inode_disk* idisk, block_sector_t isector, off_t pos)
 		struct indirect_disk* indir_d = malloc(BLOCK_SECTOR_SIZE);
 		struct indirect_disk* indir_s = malloc(BLOCK_SECTOR_SIZE);
 		/* Access double indirect inode */
-		if(idisk->double_indirect == UINT_MAX)
+		if(idisk->double_indirect == UINT32_MAX)
 		{
-			idisk->double_indirect = free_map_allocate();
+			if(!free_map_allocate(1, &idisk->double_indirect))
+				goto double_end;
 			memset(indir_d, 0xff, BLOCK_SECTOR_SIZE);
 		}
 		else
 			block_read(fs_device, idisk->double_indirect, indir_d);
 
 		/* Access second-rank inode */
-		if(indir_d->sector[idx_double] == UINT_MAX)
+		if(indir_d->sector[idx_double] == UINT32_MAX)
 		{
-			indir_d->sector[idx_double] = free_map_allocate();
+			if(!free_map_allocate(1, &indir_d->sector[idx_double]))
+				goto double_end;
 			memset(indir_s, 0xff, BLOCK_SECTOR_SIZE);
 		}
 		else
 			block_read(fs_device, indir_d->sector[idx_double], indir_s);
 
 		/* Extend index */
-		ASSERT(indir_s->sector[idx_single] == UINT_MAX);
-		sector = indir_s->sector[idx_single] = free_map_allocate();
-		block_write(fs_device, sector, zeros);
-		block_write(fs_device, indir_d->sector[idx_double], indir_s);
-		block_write(fs_device, idisk->double_indirect, indir_d);
-		free(indir_s);
-		free(indir_d);
+		ASSERT(indir_s->sector[idx_single] == UINT32_MAX);
+		if(free_map_allocate(1, &sector))
+		{
+			indir_s->sector[idx_single] = sector;
+			block_write(fs_device, indir_d->sector[idx_double], indir_s);
+			block_write(fs_device, idisk->double_indirect, indir_d);
+			success = true;
+		}
+		double_end:
+			free(indir_s);
+			free(indir_d);
 	}
 	/* Free resource then return sector */
-	block_write(fs_device, isector, idisk);
-	free(zeros);
+	if(success)
+	{
+		block_write(fs_device, sector, zeros);
+		block_write(fs_device, isector, idisk);
+	}
 	return sector;
 }
 
@@ -543,8 +570,8 @@ get_sector(const struct inode_disk* idisk, off_t pos)
 		struct indirect_disk* indir_s;
 		size_t idx_s = index - DIRECT_LIMIT;
 
-		if(idisk->single_indirect == UINT_MAX)
-			return UINT_MAX;
+		if(idisk->single_indirect == UINT32_MAX)
+			return UINT32_MAX;
 
 		indir_s = malloc(BLOCK_SECTOR_SIZE);
 		block_read(fs_device, idisk->single_indirect, indir_s);
@@ -555,22 +582,22 @@ get_sector(const struct inode_disk* idisk, off_t pos)
 	}
 	else
 	{
-		block_sector_t sector = UINT_MAX;
+		block_sector_t sector = UINT32_MAX;
 		size_t idx_s = (index - SINGLE_INDIRECT_LIMIT) % INT_PER_SECTOR;
 		size_t idx_d = (index - SINGLE_INDIRECT_LIMIT) / INT_PER_SECTOR;
 		struct indirect_disk* indir_s = malloc(BLOCK_SECTOR_SIZE);
 		struct indirect_disk* indir_d = malloc(BLOCK_SECTOR_SIZE);
 		
-		if(idisk->double_indirect == UINT_MAX)
-			goto done;
+		if(idisk->double_indirect == UINT32_MAX)
+			goto convert_done;
 		block_read(fs_device, idisk->double_indirect, indir_d);
 		
-		if(indir_d->sector[idx_d] == UINT_MAX)
-			goto done;
+		if(indir_d->sector[idx_d] == UINT32_MAX)
+			goto convert_done;
 		block_read(fs_device, indir_d->sector[idx_d], indir_s);
 
 		sector = indir_s->sector[idx_s];
-		done:
+		convert_done:
 			free(indir_s);
 			free(indir_d);
 			return sector;

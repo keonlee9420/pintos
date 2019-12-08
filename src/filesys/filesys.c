@@ -44,6 +44,7 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+	//dir_check(dir_open_root(), 0);
 	/* Project4 S */
 	cache_writeback();
 	/* Project4 E */
@@ -57,18 +58,18 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size, bool isdir) 
 {
+  block_sector_t inode_sector = 0;
   /* Project4 S */
 	char filename[NAME_MAX + 1];
   struct dir *dir = dir_open_cur ();
 	block_sector_t parent_sector = inode_get_inumber(dir_get_inode(dir));
-  block_sector_t inode_sector = free_map_allocate ();
   bool success = (dir != NULL
 									&& dir_chdir(&dir, name, filename)
-                  && inode_sector != UINT_MAX
+                  && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, parent_sector)
                   && dir_add (dir, filename, inode_sector, isdir));
-  if (!success && inode_sector != UINT_MAX) 
-    free_map_release (inode_sector);
+  if (!success && inode_sector != 0) 
+    free_map_release (inode_sector, 1);
   /* Project4 E */
   dir_close (dir);
 
@@ -90,7 +91,10 @@ filesys_open (const char *name, bool* isdir)
 	/* Project4 S */
 	/* Handle opening root directory */
 	if(!strcmp(name, "/"))
-		return dir_open(inode_open(ROOT_DIR_SECTOR));
+	{
+		*isdir = true;
+		return dir_open_root();
+	}
 
 	dir = dir_open_cur();
 	/* Travel file path */
@@ -100,7 +104,10 @@ filesys_open (const char *name, bool* isdir)
 	/* IF filename is '.', 
 		 then return iterated directory by chdir */
 	if(!strcmp(filename, "."))
+	{
+		*isdir = true;
 		return dir;
+	}
 	/* Project4 E */
 
   if (dir != NULL)
@@ -144,7 +151,7 @@ do_format (void)
 {
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16))
+  if (!dir_create (ROOT_DIR_SECTOR, 0))
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");

@@ -114,7 +114,7 @@ fsutil_extract (char **argv UNUSED)
         }
       else if (type == USTAR_DIRECTORY)
         printf ("ignoring directory %s\n", file_name);
-      else if (type == USTAR_REGULAR)
+      else if (type == USTAR_REGULAR || type == USTAR_DIRECTORY)
         {
           struct file *dst;
 					bool isdir;
